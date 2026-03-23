@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { useAuth } from '../context/useAuth'
-import { getResumenHermanoMayor, getSemanaActual, updateEstudiante, getHermanosMayores } from '../services/asistenciaService'
-import type { Estudiante, ResumenAsistencia } from '../types/domain'
+import { getResumenHermanoMayor, getSemanaActual, updateEstudiante, getHermanosMayores, getTextoReporteAsistencia, getTodasLasSemanas } from '../services/asistenciaService'
+import type { Estudiante, ResumenAsistencia, Semana } from '../types/domain'
 
 function stateClass(text: ResumenAsistencia['progreso']) {
   if (text === 'Completado') {
@@ -27,41 +27,51 @@ export function RegistroPage() {
   const [editingData, setEditingData] = useState<Partial<Estudiante>>({})
   const [saving, setSaving] = useState(false)
   const [hermanosMayores, setHermanosMayores] = useState<Pick<Estudiante, 'id' | 'nombre'>[]>([])
+  const [semanaActiva, setSemanaActiva] = useState<Semana | null>(null)
+  const [semanas, setSemanas] = useState<Semana[]>([])
 
-  const loadData = () => {
+  const loadData = async (semanaIdToLoad?: number) => {
+    const targetId = semanaIdToLoad ?? semanaActiva?.id
+    if (!targetId) return
+
     setLoading(true)
-    getSemanaActual()
-      .then(async (semana) => {
-        if (!semana) {
-          setRows([])
-          setTitle('No hay semana activa')
-          setLoading(false)
-          return
-        }
-
-        setTitle(`Resumen semana ${semana.semana_academica}`)
-        
-        const [resumen, hmList] = await Promise.all([
-          getResumenHermanoMayor(profile!.id, semana.id),
-          getHermanosMayores()
-        ])
-        
-        setRows(resumen)
-        setHermanosMayores(hmList)
-        setLoading(false)
-      })
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : 'No se pudo cargar el panel')
-        setLoading(false)
-      })
+    try {
+      const [resumen, hmList, allSemanas] = await Promise.all([
+        getResumenHermanoMayor(profile!.id, targetId),
+        getHermanosMayores(),
+        semanas.length === 0 ? getTodasLasSemanas() : Promise.resolve(semanas)
+      ])
+      
+      if (semanas.length === 0) setSemanas(allSemanas)
+      
+      const current = allSemanas.find(s => s.id === targetId)
+      if (current) {
+        setSemanaActiva(current)
+        setTitle(`Resumen semana ${current.semana_academica}`)
+      }
+      
+      setRows(resumen)
+      setHermanosMayores(hmList)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo cargar el panel')
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => {
-    if (!profile || profile.rol !== 'Hermano_Mayor') {
-      return
-    }
-    loadData()
-  }, [profile])
+    if (!profile || profile.rol !== 'Hermano_Mayor') return
+    
+    getSemanaActual().then(actual => {
+      if (actual) {
+        loadData(actual.id)
+      } else {
+        setRows([])
+        setTitle('No hay semana activa')
+        setLoading(false)
+      }
+    })
+  }, [profile?.id])
 
   const handleSave = async (id: number) => {
     if (editingData.semestre !== undefined && (editingData.semestre < 1 || editingData.semestre > 10)) {
@@ -82,6 +92,17 @@ export function RegistroPage() {
     }
   }
 
+  const handleCopy = async (estudiante: Estudiante) => {
+    if (!semanaActiva) return
+    try {
+      const text = await getTextoReporteAsistencia(estudiante, semanaActiva)
+      await navigator.clipboard.writeText(text)
+      toast.success(`Reporte de ${estudiante.nombre} copiado al portapapeles`)
+    } catch {
+      toast.error('Ocurrió un error al generar o copiar el reporte')
+    }
+  }
+
   if (loading) {
     return <div className="card">Cargando panel...</div>
   }
@@ -94,11 +115,33 @@ export function RegistroPage() {
     return <div className="card error-text">{error}</div>
   }
 
+  const handleSemanaChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const sId = parseInt(e.target.value, 10)
+    if (sId) {
+      loadData(sId)
+    }
+  }
+
   return (
     <section className="stack-lg">
-      <div className="card">
-        <p className="eyebrow">Panel de seguimiento</p>
-        <h1>{title}</h1>
+      <div className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+        <div>
+          <p className="eyebrow">Panel de seguimiento</p>
+          <h1>{title}</h1>
+        </div>
+        
+        {semanas.length > 0 && semanaActiva?.corte_semestre && (
+          <label style={{ minWidth: '220px', margin: 0 }}>
+            Semana Evaluada Periodo {semanaActiva.corte_semestre}
+            <select value={semanaActiva?.id ?? ''} onChange={handleSemanaChange}>
+              {semanas
+                .filter(s => s.corte_semestre === semanaActiva.corte_semestre && s.semana_academica > 0)
+                .map(s => (
+                <option key={s.id} value={s.id}>Semana {s.semana_academica}</option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
 
       <div className="list-card">
@@ -184,6 +227,9 @@ export function RegistroPage() {
                     setEditingData(item.estudianteData)
                   }}>
                     ✏️ Editar
+                  </button>
+                  <button className="btn-ghost btn-sm" onClick={() => handleCopy(item.estudianteData)}>
+                    📋 Copiar
                   </button>
                 </div>
               </article>

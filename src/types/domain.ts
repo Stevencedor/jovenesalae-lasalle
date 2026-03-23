@@ -63,6 +63,7 @@ export interface ResumenAsistencia {
 export interface DashboardMetrics {
   totalMaterias: number
   asistenciaSemanalPorcentaje: number
+  asistenciasSemana: number
   asistenciaSemestralPorcentaje: number
   asistenciasTotales: number
   totalEsperadoSemestre: number

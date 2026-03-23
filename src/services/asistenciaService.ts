@@ -108,6 +108,7 @@ export async function getDashboardMetrics(
     return {
       totalMaterias: 0,
       asistenciaSemanalPorcentaje: 0,
+      asistenciasSemana: 0,
       asistenciaSemestralPorcentaje: 0,
       asistenciasTotales: 0,
       totalEsperadoSemestre: 0,
@@ -156,6 +157,7 @@ export async function getDashboardMetrics(
   return {
     totalMaterias,
     asistenciaSemanalPorcentaje,
+    asistenciasSemana: asistenciasSemanaObjetivo.length,
     asistenciaSemestralPorcentaje,
     asistenciasTotales,
     totalEsperadoSemestre,
@@ -224,9 +226,9 @@ export async function getResumenHermanoMayor(
 
   for (const estudiante of estudiantes) {
     const materias = await getMateriasSemestre(estudiante.semestre)
-    const { count, error: asistenciasError } = await supabase
+    const { data: asistenciasRecord, error: asistenciasError } = await supabase
       .from('asistencias')
-      .select('*', { count: 'exact', head: true })
+      .select('id')
       .eq('estudiante_id', estudiante.id)
       .eq('semana_id', semanaId)
 
@@ -234,7 +236,7 @@ export async function getResumenHermanoMayor(
       throw asistenciasError
     }
 
-    const realizadas = count ?? 0
+    const realizadas = asistenciasRecord?.length ?? 0
     const totalMaterias = materias.length
 
     const progreso =
@@ -274,4 +276,32 @@ export async function updateEstudiante(id: number, data: Partial<Estudiante>) {
   if (error) {
     throw error
   }
+}
+
+export async function getTodasLasSemanas(): Promise<Semana[]> {
+  const { data, error } = await supabase.from('semanas').select('*').order('semana_academica')
+  if (error) throw error
+  return data
+}
+
+export async function getTextoReporteAsistencia(estudiante: Estudiante, semana: Semana): Promise<string> {
+  const materias = await getMateriasSemestre(estudiante.semestre)
+  const asistencias = await getAsistenciasSemana(estudiante.id, semana.id)
+
+  let text = `Reporte Asistencia - Semana ${semana.semana_academica}\n`
+  text += `Estudiante: ${estudiante.nombre}\n`
+  text += `-----------------------------------\n`
+  
+  for (const m of materias) {
+    const a = asistencias.find(x => x.materia_id === m.id)
+    if (!a) {
+      text += `• ${m.nombre}: No registrado\n`
+    } else {
+      text += `• ${m.nombre}: ${a.asistencia}`
+      if (a.asistencia === 'No' && a.motivo_inasistencia) text += ` (Motivo: ${a.motivo_inasistencia})`
+      if (a.observaciones && a.observaciones !== 'Ninguna observacion') text += ` [Obs: ${a.observaciones}]`
+      text += '\n'
+    }
+  }
+  return text
 }

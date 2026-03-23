@@ -41,7 +41,12 @@ export function AuthProvider({ children }: PropsWithChildren) {
       }
 
       const nextProfile = await getProfile(nextUser.email)
-      setProfile(nextProfile)
+      setProfile((prev) => {
+        if (JSON.stringify(prev) === JSON.stringify(nextProfile)) {
+          return prev
+        }
+        return nextProfile
+      })
     } catch (err) {
       console.error('Error fetching profile in AuthContext:', err)
       setProfile(null)

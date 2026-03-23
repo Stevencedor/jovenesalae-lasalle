@@ -59,7 +59,7 @@ export function DashboardPage() {
         <KpiCard
           title="Asistencia semanal"
           value={formatPercent(metrics.asistenciaSemanalPorcentaje)}
-          subtitle={`Semana objetivo ${metrics.semanaObjetivo?.semana_academica ?? '-'}`}
+          subtitle={`${metrics.asistenciasSemana} registradas de ${metrics.totalMaterias}`}
         />
         <KpiCard
           title="Asistencia semestral"
