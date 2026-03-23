@@ -68,11 +68,13 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, currentSession) => {
+    } = supabase.auth.onAuthStateChange((_event, currentSession) => {
       setSession(currentSession)
       setUser(currentSession?.user ?? null)
-      await refreshProfile(currentSession?.user ?? null)
-      setLoading(false)
+      
+      refreshProfile(currentSession?.user ?? null).finally(() => {
+        setLoading(false)
+      })
     })
 
     return () => {
