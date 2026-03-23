@@ -30,7 +30,10 @@ export function AppLayout() {
             <strong>{profile?.nombre ?? 'Usuario'}</strong>
             <small>{roleLabel ?? 'Sin rol'}</small>
           </div>
-          <button onClick={handleLogout}>Salir</button>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'flex-end', marginTop: '0.2rem' }}>
+            <Link to="/perfil" className="btn-ghost btn-sm">Mi Perfil</Link>
+            <button className="btn-sm" onClick={handleLogout}>Salir</button>
+          </div>
         </div>
       </header>
 

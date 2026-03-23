@@ -7,6 +7,10 @@ export interface Estudiante {
   cedula: string
   nombre: string
   email: string
+  email_personal?: string | null
+  telefono?: string | null
+  direccion?: string | null
+  ciudad?: string | null
   semestre: number
   grupo: number
   rol: RolUsuario
@@ -53,6 +57,7 @@ export interface ResumenAsistencia {
   asistenciaRealizada: number
   materias: number
   progreso: EstadoProgreso
+  estudianteData: Estudiante
 }
 
 export interface DashboardMetrics {

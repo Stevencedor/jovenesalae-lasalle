@@ -105,6 +105,14 @@ export function AuthProvider({ children }: PropsWithChildren) {
     }
   }, [])
 
+  const updatePassword = useCallback(async (password: string) => {
+    if (!isSupabaseConfigured) {
+      throw new Error('Configura Supabase en .env')
+    }
+    const { error } = await supabase.auth.updateUser({ password })
+    if (error) throw error
+  }, [])
+
   const value = useMemo<AuthContextValue>(
     () => ({
       session,
@@ -113,8 +121,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
       loading,
       signIn,
       signOut,
+      updatePassword,
     }),
-    [loading, profile, session, signIn, signOut, user],
+    [loading, profile, session, signIn, signOut, updatePassword, user],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

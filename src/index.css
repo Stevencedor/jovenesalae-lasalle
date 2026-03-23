@@ -175,10 +175,10 @@ button {
 }
 
 .btn-ghost {
-  background: rgba(255, 255, 255, 0.1);
-  color: white;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  backdrop-filter: blur(8px);
+  background: rgba(15, 63, 108, 0.05);
+  color: var(--brand);
+  border: 1px solid rgba(15, 63, 108, 0.15);
+  backdrop-filter: none;
 }
 
 .btn-primary:not(:disabled):hover,
@@ -189,8 +189,13 @@ button:not(:disabled):hover {
 }
 
 .btn-ghost:not(:disabled):hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(15, 63, 108, 0.12);
   transform: translateY(-2px);
+}
+
+.btn-sm {
+  padding: 0.5rem 1.25rem;
+  font-size: 0.9rem;
 }
 
 button:disabled {
@@ -280,6 +285,8 @@ label {
 input,
 textarea,
 select {
+  width: 100%;
+  max-width: 100%;
   border-radius: var(--radius);
   border: 1px solid var(--line);
   font: inherit;

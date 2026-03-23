@@ -213,9 +213,8 @@ export async function getResumenHermanoMayor(
 ): Promise<ResumenAsistencia[]> {
   const { data: estudiantes, error: estudiantesError } = await supabase
     .from('estudiantes')
-    .select('id,nombre,semestre')
+    .select('*')
     .eq('hermano_mayor', hermanoMayorId)
-    .eq('status', 'Activo')
 
   if (estudiantesError) {
     throw estudiantesError
@@ -251,8 +250,28 @@ export async function getResumenHermanoMayor(
       asistenciaRealizada: realizadas,
       materias: totalMaterias,
       progreso,
+      estudianteData: estudiante as Estudiante,
     })
   }
 
   return resumen.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
+}
+
+export async function getHermanosMayores(): Promise<Pick<Estudiante, 'id' | 'nombre'>[]> {
+  const { data, error } = await supabase
+    .from('estudiantes')
+    .select('id, nombre')
+    .eq('rol', 'Hermano_Mayor')
+    .eq('status', 'Activo')
+    .order('nombre')
+
+  if (error) throw error
+  return data
+}
+
+export async function updateEstudiante(id: number, data: Partial<Estudiante>) {
+  const { error } = await supabase.from('estudiantes').update(data).eq('id', id)
+  if (error) {
+    throw error
+  }
 }

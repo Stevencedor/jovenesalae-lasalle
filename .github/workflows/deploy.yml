@@ -8,6 +8,9 @@ on:
   # Permite lanzar este flujo manualmente desde la pestaña Actions
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 # Configura permisos para que Action GITHUB_TOKEN pueda desplegar en Pages
 permissions:
   contents: read
@@ -37,7 +40,7 @@ jobs:
       - name: Configurar Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: 'pnpm'
 
       - name: Instalar dependencias

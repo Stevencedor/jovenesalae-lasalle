@@ -1,4 +1,5 @@
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { Toaster } from 'sonner'
 import { AppLayout } from './components/AppLayout'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { AuthProvider } from './context/AuthContext'
@@ -6,12 +7,14 @@ import { AsistenciaPage } from './pages/AsistenciaPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { LoginPage } from './pages/LoginPage'
 import { MateriasPage } from './pages/MateriasPage'
+import { ProfilePage } from './pages/ProfilePage'
 import { PublicLanding } from './pages/PublicLanding'
 import { RegistroPage } from './pages/RegistroPage'
 
 function App() {
   return (
     <AuthProvider>
+      <Toaster richColors position="top-center" theme="light" />
       <HashRouter>
         <Routes>
           <Route path="/" element={<PublicLanding />} />
@@ -22,6 +25,7 @@ function App() {
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/materias" element={<MateriasPage />} />
               <Route path="/asistencia/:materiaId" element={<AsistenciaPage />} />
+              <Route path="/perfil" element={<ProfilePage />} />
               <Route
                 path="/registro"
                 element={
