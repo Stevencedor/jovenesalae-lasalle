@@ -305,3 +305,45 @@ export async function getTextoReporteAsistencia(estudiante: Estudiante, semana: 
   }
   return text
 }
+
+interface CrearEstudianteInput {
+  cedula: string
+  nombre: string
+  email: string
+  semestre: number
+  grupo: number
+  rol: 'Hermano_Mayor' | 'Hermano_Menor'
+  hermano_mayor: number
+  telefono?: string
+  ciudad?: string
+}
+
+export async function crearEstudiante(input: CrearEstudianteInput) {
+  const password = `LaSalle${input.cedula}`
+
+  const { error: authError } = await supabase.auth.signUp({
+    email: input.email,
+    password,
+  })
+
+  if (authError) {
+    throw authError
+  }
+
+  const { error: dbError } = await supabase.from('estudiantes').insert({
+    cedula: input.cedula,
+    nombre: input.nombre,
+    email: input.email,
+    semestre: input.semestre,
+    grupo: input.grupo,
+    rol: input.rol,
+    hermano_mayor: input.hermano_mayor,
+    telefono: input.telefono ?? null,
+    ciudad: input.ciudad ?? null,
+    status: 'Activo',
+  })
+
+  if (dbError) {
+    throw dbError
+  }
+}
