@@ -1,0 +1,62 @@
+name: Deploy to GitHub Pages
+
+on:
+  # Lanza el despliegue cuando se haga push en la rama main
+  push:
+    branches: ["main"]
+
+  # Permite lanzar este flujo manualmente desde la pestaña Actions
+  workflow_dispatch:
+
+# Configura permisos para que Action GITHUB_TOKEN pueda desplegar en Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Prevenir ejecuciones concurrentes pero noCancelar compilaciones intermedias en progreso
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout del código
+        uses: actions/checkout@v4
+
+      - name: Instalar pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 8
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+
+      - name: Construir proyecto
+        run: pnpm run build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+
+      - name: Configurar GitHub Pages
+        uses: actions/configure-pages@v4
+
+      - name: Subir artefacto para Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './dist'
+
+      - name: Desplegar a GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

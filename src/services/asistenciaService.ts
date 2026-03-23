@@ -53,12 +53,27 @@ export async function getMateriasSemestre(semestre: number): Promise<Materia[]> 
 export async function getAsistenciasEstudiante(
   estudianteId: number,
   corteSemestral: string,
-): Promise<(Asistencia & { semanas: Semana | null })[]> {
+): Promise<Asistencia[]> {
+  const { data: semanas, error: semanasError } = await supabase
+    .from('semanas')
+    .select('id')
+    .eq('corte_semestre', corteSemestral)
+
+  if (semanasError) {
+    throw semanasError
+  }
+
+  const semanaIds = semanas.map((s) => s.id)
+
+  if (semanaIds.length === 0) {
+    return []
+  }
+
   const { data, error } = await supabase
     .from('asistencias')
-    .select('*, semanas!inner(*)')
+    .select('*')
     .eq('estudiante_id', estudianteId)
-    .eq('semanas.corte_semestre', corteSemestral)
+    .in('semana_id', semanaIds)
 
   if (error) {
     throw error
