@@ -39,5 +39,16 @@ export function ProtectedRoute({ allowedRoles }: ProtectedRouteProps) {
     return <Navigate to="/dashboard" replace />
   }
 
+  const debeConfirmarMatricula =
+    profile.rol === 'Hermano_Menor' && !profile.matricula_confirmada
+
+  if (debeConfirmarMatricula && location.pathname !== '/matricula/confirmar') {
+    return <Navigate to="/matricula/confirmar" replace />
+  }
+
+  if (!debeConfirmarMatricula && location.pathname === '/matricula/confirmar') {
+    return <Navigate to="/dashboard" replace />
+  }
+
   return <Outlet />
 }

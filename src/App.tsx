@@ -6,6 +6,7 @@ import { AuthProvider } from './context/AuthContext'
 import { AsistenciaPage } from './pages/AsistenciaPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { LoginPage } from './pages/LoginPage'
+import { MatriculaConfirmacionPage } from './pages/MatriculaConfirmacionPage'
 import { MateriasPage } from './pages/MateriasPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { PublicLanding } from './pages/PublicLanding'
@@ -23,6 +24,7 @@ function App() {
           <Route element={<ProtectedRoute />}>
             <Route element={<AppLayout />}>
               <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/matricula/confirmar" element={<MatriculaConfirmacionPage />} />
               <Route path="/materias" element={<MateriasPage />} />
               <Route path="/asistencia/:materiaId" element={<AsistenciaPage />} />
               <Route path="/perfil" element={<ProfilePage />} />

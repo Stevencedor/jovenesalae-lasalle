@@ -14,7 +14,7 @@ async function getProfile(email: string): Promise<Estudiante | null> {
   const { data, error } = await supabase
     .from('estudiantes')
     .select(
-      'id,cedula,nombre,email,semestre,grupo,rol,hermano_mayor,status',
+      'id,cedula,nombre,email,semestre,grupo,rol,hermano_mayor,status,matricula_confirmada',
     )
     .eq('email', email)
     .eq('status', 'Activo')
@@ -33,7 +33,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [profile, setProfile] = useState<Estudiante | null>(null)
   const [loading, setLoading] = useState(isSupabaseConfigured)
 
-  const refreshProfile = useCallback(async (nextUser: User | null) => {
+  const refreshProfileByUser = useCallback(async (nextUser: User | null) => {
     try {
       if (!nextUser || !nextUser.email) {
         setProfile(null)
@@ -67,7 +67,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
       setSession(data.session)
       setUser(data.session?.user ?? null)
-      await refreshProfile(data.session?.user ?? null)
+      await refreshProfileByUser(data.session?.user ?? null)
       setLoading(false)
     })
 
@@ -77,7 +77,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       setSession(currentSession)
       setUser(currentSession?.user ?? null)
       
-      refreshProfile(currentSession?.user ?? null).finally(() => {
+      refreshProfileByUser(currentSession?.user ?? null).finally(() => {
         setLoading(false)
       })
     })
@@ -86,7 +86,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
       active = false
       subscription.unsubscribe()
     }
-  }, [refreshProfile])
+  }, [refreshProfileByUser])
+
+  const refreshProfile = useCallback(async () => {
+    await refreshProfileByUser(user)
+  }, [refreshProfileByUser, user])
 
   const signIn = useCallback(async (email: string, password: string) => {
     if (!isSupabaseConfigured) {
@@ -124,11 +128,12 @@ export function AuthProvider({ children }: PropsWithChildren) {
       user,
       profile,
       loading,
+      refreshProfile,
       signIn,
       signOut,
       updatePassword,
     }),
-    [loading, profile, session, signIn, signOut, updatePassword, user],
+    [loading, profile, refreshProfile, session, signIn, signOut, updatePassword, user],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

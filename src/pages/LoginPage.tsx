@@ -12,7 +12,11 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null)
 
   if (user && profile) {
-    return <Navigate to="/dashboard" replace />
+    const to =
+      profile.rol === 'Hermano_Menor' && !profile.matricula_confirmada
+        ? '/matricula/confirmar'
+        : '/dashboard'
+    return <Navigate to={to} replace />
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {

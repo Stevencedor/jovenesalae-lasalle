@@ -5,7 +5,7 @@ import {
   crearAsistencia,
   getDashboardMetrics,
   getMateriasConRegistroSemana,
-  getMateriasSemestre,
+  getMateriasEstudiante,
 } from '../services/asistenciaService'
 import type { TipoAsistencia } from '../types/domain'
 
@@ -68,10 +68,14 @@ export function AsistenciaPage() {
       return
     }
 
-    getMateriasSemestre(profile.semestre)
+    getMateriasEstudiante(profile.id)
       .then((materias) => {
         const materia = materias.find((item) => item.id === materiaIdNum)
-        setMateriaNombre(materia?.nombre ?? 'Materia')
+        if (!materia) {
+          setError('La materia no pertenece a tu matricula actual.')
+        } else {
+          setMateriaNombre(materia.nombre)
+        }
         setLoading(false)
       })
       .catch((err: unknown) => {
@@ -98,6 +102,13 @@ export function AsistenciaPage() {
     setError(null)
 
     try {
+      const materias = await getMateriasEstudiante(profile.id)
+      const materiaExiste = materias.some((m) => m.id === materiaIdNum)
+
+      if (!materiaExiste) {
+        throw new Error('La materia no pertenece a tu matricula actual.')
+      }
+
       const metrics = await getDashboardMetrics(profile)
 
       if (!metrics.semanaObjetivo) {

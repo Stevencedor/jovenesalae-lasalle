@@ -3,10 +3,12 @@ import type {
   Asistencia,
   DashboardMetrics,
   Estudiante,
+  EstudianteMateria,
   Materia,
   ResumenAsistencia,
   Semana,
   TipoAsistencia,
+  TipoMatricula,
 } from '../types/domain'
 
 function withOffset(date: Date) {
@@ -48,6 +50,88 @@ export async function getMateriasSemestre(semestre: number): Promise<Materia[]> 
   }
 
   return data
+}
+
+function mapMateriaJoinValue(value: unknown): Materia | undefined {
+  if (!value) {
+    return undefined
+  }
+
+  if (Array.isArray(value)) {
+    return value[0] as Materia | undefined
+  }
+
+  return value as Materia
+}
+
+export async function getMatriculasEstudiante(estudianteId: number): Promise<EstudianteMateria[]> {
+  const { data, error } = await supabase
+    .from('estudiante_materias')
+    .select('id, estudiante_id, materia_id, tipo, materia:materias(id, nombre, semestre)')
+    .eq('estudiante_id', estudianteId)
+
+  if (error) {
+    throw error
+  }
+
+  const rows = (data ?? []).map((row) => {
+    const materia = mapMateriaJoinValue(row.materia)
+    return {
+      id: row.id,
+      estudiante_id: row.estudiante_id,
+      materia_id: row.materia_id,
+      tipo: row.tipo as TipoMatricula,
+      materia,
+    }
+  })
+
+  return rows.sort((a, b) => (a.materia?.nombre ?? '').localeCompare(b.materia?.nombre ?? '', 'es'))
+}
+
+export async function getMateriasEstudiante(estudianteId: number): Promise<Materia[]> {
+  const matriculas = await getMatriculasEstudiante(estudianteId)
+  return matriculas
+    .map((m) => m.materia)
+    .filter((materia): materia is Materia => Boolean(materia))
+}
+
+export async function agregarMatricula(
+  estudianteId: number,
+  materiaId: number,
+  tipo: TipoMatricula,
+) {
+  const { error } = await supabase.from('estudiante_materias').insert({
+    estudiante_id: estudianteId,
+    materia_id: materiaId,
+    tipo,
+  })
+
+  if (error) {
+    throw error
+  }
+}
+
+export async function eliminarMatricula(estudianteId: number, materiaId: number) {
+  const { error } = await supabase
+    .from('estudiante_materias')
+    .delete()
+    .eq('estudiante_id', estudianteId)
+    .eq('materia_id', materiaId)
+
+  if (error) {
+    throw error
+  }
+}
+
+export async function confirmarMatriculaEstudiante(estudianteId: number) {
+  const { error } = await supabase
+    .from('estudiantes')
+    .update({ matricula_confirmada: true })
+    .eq('id', estudianteId)
+
+  if (error) {
+    throw error
+  }
 }
 
 export async function getAsistenciasEstudiante(
@@ -117,7 +201,7 @@ export async function getDashboardMetrics(
     }
   }
 
-  const materias = await getMateriasSemestre(estudiante.semestre)
+  const materias = await getMateriasEstudiante(estudiante.id)
   const totalMaterias = materias.length
 
   const asistenciasSemestrales = await getAsistenciasEstudiante(
@@ -169,14 +253,17 @@ export async function getDashboardMetrics(
 export async function getMateriasConRegistroSemana(
   estudiante: Estudiante,
   semanaId: number,
-): Promise<Array<Materia & { registro: boolean }>> {
-  const materias = await getMateriasSemestre(estudiante.semestre)
+): Promise<Array<Materia & { registro: boolean; tipo: TipoMatricula }>> {
+  const matriculas = await getMatriculasEstudiante(estudiante.id)
   const asistencias = await getAsistenciasSemana(estudiante.id, semanaId)
 
-  return materias.map((materia) => ({
-    ...materia,
-    registro: asistencias.some((asistencia) => asistencia.materia_id === materia.id),
-  }))
+  return matriculas
+    .filter((matricula) => Boolean(matricula.materia))
+    .map((matricula) => ({
+      ...(matricula.materia as Materia),
+      tipo: matricula.tipo,
+      registro: asistencias.some((asistencia) => asistencia.materia_id === matricula.materia_id),
+    }))
 }
 
 interface CrearAsistenciaInput {
@@ -225,7 +312,7 @@ export async function getResumenHermanoMayor(
   const resumen: ResumenAsistencia[] = []
 
   for (const estudiante of estudiantes) {
-    const materias = await getMateriasSemestre(estudiante.semestre)
+    const materias = await getMateriasEstudiante(estudiante.id)
     const { data: asistenciasRecord, error: asistenciasError } = await supabase
       .from('asistencias')
       .select('id')
@@ -285,7 +372,7 @@ export async function getTodasLasSemanas(): Promise<Semana[]> {
 }
 
 export async function getTextoReporteAsistencia(estudiante: Estudiante, semana: Semana): Promise<string> {
-  const materias = await getMateriasSemestre(estudiante.semestre)
+  const materias = await getMateriasEstudiante(estudiante.id)
   const asistencias = await getAsistenciasSemana(estudiante.id, semana.id)
 
   let text = `Reporte Asistencia - Semana ${semana.semana_academica}\n`
@@ -316,6 +403,8 @@ interface CrearEstudianteInput {
   hermano_mayor: number
   telefono?: string
   ciudad?: string
+  materiasRepeticionIds?: number[]
+  materiasAdelantoIds?: number[]
 }
 
 export async function crearEstudiante(input: CrearEstudianteInput) {
@@ -330,20 +419,62 @@ export async function crearEstudiante(input: CrearEstudianteInput) {
     throw authError
   }
 
-  const { error: dbError } = await supabase.from('estudiantes').insert({
-    cedula: input.cedula,
-    nombre: input.nombre,
-    email: input.email,
-    semestre: input.semestre,
-    grupo: input.grupo,
-    rol: input.rol,
-    hermano_mayor: input.hermano_mayor,
-    telefono: input.telefono ?? null,
-    ciudad: input.ciudad ?? null,
-    status: 'Activo',
-  })
+  const { data: estudianteCreado, error: dbError } = await supabase
+    .from('estudiantes')
+    .insert({
+      cedula: input.cedula,
+      nombre: input.nombre,
+      email: input.email,
+      semestre: input.semestre,
+      grupo: input.grupo,
+      rol: input.rol,
+      hermano_mayor: input.hermano_mayor,
+      telefono: input.telefono ?? null,
+      ciudad: input.ciudad ?? null,
+      status: 'Activo',
+      matricula_confirmada: false,
+    })
+    .select('id')
+    .single()
 
   if (dbError) {
     throw dbError
+  }
+
+  const materiasNormales = await getMateriasSemestre(input.semestre)
+  const normalIds = materiasNormales.map((materia) => materia.id)
+  const repeticionIds = input.materiasRepeticionIds ?? []
+  const adelantoIds = input.materiasAdelantoIds ?? []
+
+  const materiaTipoMap = new Map<number, TipoMatricula>()
+
+  for (const id of normalIds) {
+    materiaTipoMap.set(id, 'normal')
+  }
+
+  for (const id of repeticionIds) {
+    if (!materiaTipoMap.has(id)) {
+      materiaTipoMap.set(id, 'repeticion')
+    }
+  }
+
+  for (const id of adelantoIds) {
+    if (!materiaTipoMap.has(id)) {
+      materiaTipoMap.set(id, 'adelanto')
+    }
+  }
+
+  const payload = Array.from(materiaTipoMap.entries()).map(([materiaId, tipo]) => ({
+    estudiante_id: estudianteCreado.id,
+    materia_id: materiaId,
+    tipo,
+  }))
+
+  if (payload.length > 0) {
+    const { error: matriculaError } = await supabase.from('estudiante_materias').insert(payload)
+
+    if (matriculaError) {
+      throw matriculaError
+    }
   }
 }

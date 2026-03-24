@@ -21,6 +21,9 @@ export function AppLayout() {
 
         <nav className="menu">
           <NavLink to="/dashboard">Inicio</NavLink>
+          {profile?.rol === 'Hermano_Menor' && !profile.matricula_confirmada ? (
+            <NavLink to="/matricula/confirmar">Confirmar matricula</NavLink>
+          ) : null}
           <NavLink to="/materias">Materias</NavLink>
           {profile?.rol === 'Hermano_Mayor' && <NavLink to="/registro">Panel</NavLink>}
         </nav>

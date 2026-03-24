@@ -16,12 +16,23 @@ export interface Estudiante {
   rol: RolUsuario
   hermano_mayor: number | null
   status: 'Activo' | 'Inactivo' | 'Graduado' | 'Retirado'
+  matricula_confirmada: boolean
 }
 
 export interface Materia {
   id: number
   nombre: string
   semestre: number
+}
+
+export type TipoMatricula = 'normal' | 'repeticion' | 'adelanto'
+
+export interface EstudianteMateria {
+  id: number
+  estudiante_id: number
+  materia_id: number
+  tipo: TipoMatricula
+  materia?: Materia
 }
 
 export interface Semana {

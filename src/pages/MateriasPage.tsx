@@ -5,9 +5,33 @@ import {
   getDashboardMetrics,
   getMateriasConRegistroSemana,
 } from '../services/asistenciaService'
-import type { Materia } from '../types/domain'
+import type { Materia, TipoMatricula } from '../types/domain'
 
-type MateriaConEstado = Materia & { registro: boolean }
+type MateriaConEstado = Materia & { registro: boolean; tipo: TipoMatricula }
+
+function tipoLabel(tipo: TipoMatricula) {
+  if (tipo === 'repeticion') {
+    return 'Recuperacion'
+  }
+
+  if (tipo === 'adelanto') {
+    return 'Adelanto'
+  }
+
+  return 'Normal'
+}
+
+function tipoClass(tipo: TipoMatricula) {
+  if (tipo === 'repeticion') {
+    return 'pill pill-warn'
+  }
+
+  if (tipo === 'adelanto') {
+    return 'pill pill-ok'
+  }
+
+  return 'pill'
+}
 
 export function MateriasPage() {
   const { profile } = useAuth()
@@ -64,16 +88,22 @@ export function MateriasPage() {
             <article key={materia.id} className="list-row">
               <div>
                 <h3>{materia.nombre}</h3>
-                <small>{materia.registro ? 'Ya registrada' : 'Pendiente de registro'}</small>
+                <small>
+                  {materia.registro ? 'Ya registrada' : 'Pendiente de registro'} |{' '}
+                  {tipoLabel(materia.tipo)}
+                </small>
               </div>
 
-              {materia.registro ? (
-                <span className="pill pill-ok">Completado</span>
-              ) : (
-                <Link className="btn-primary" to={`/asistencia/${materia.id}`}>
-                  Registrar
-                </Link>
-              )}
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                <span className={tipoClass(materia.tipo)}>{tipoLabel(materia.tipo)}</span>
+                {materia.registro ? (
+                  <span className="pill pill-ok">Completado</span>
+                ) : (
+                  <Link className="btn-primary" to={`/asistencia/${materia.id}`}>
+                    Registrar
+                  </Link>
+                )}
+              </div>
             </article>
           ))
         )}
