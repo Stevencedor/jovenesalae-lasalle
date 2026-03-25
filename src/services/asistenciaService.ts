@@ -220,6 +220,93 @@ export async function getAsistenciasSemana(
   return data
 }
 
+export async function getResumenSemestralPorEstudiantes(
+  estudianteIds: number[],
+  corteSemestral: string,
+  semanaAcademica: number,
+): Promise<
+  Map<
+    number,
+    {
+      totalMateriasSemana: number
+      asistenciasTotales: number
+      totalEsperadoSemestre: number
+    }
+  >
+> {
+  const idsUnicos = Array.from(new Set(estudianteIds))
+
+  if (idsUnicos.length === 0) {
+    return new Map()
+  }
+
+  const { data: semanasRows, error: semanasError } = await supabase
+    .from('semanas')
+    .select('id')
+    .eq('corte_semestre', corteSemestral)
+
+  if (semanasError) {
+    throw semanasError
+  }
+
+  const semanaIds = (semanasRows ?? []).map((s) => s.id)
+
+  const [{ data: matriculasRows, error: matriculasError }, { data: asistenciasRows, error: asistenciasError }] =
+    await Promise.all([
+      supabase
+        .from('estudiante_materias')
+        .select('estudiante_id')
+        .in('estudiante_id', idsUnicos),
+      semanaIds.length > 0
+        ? supabase
+            .from('asistencias')
+            .select('estudiante_id')
+            .in('estudiante_id', idsUnicos)
+            .in('semana_id', semanaIds)
+        : Promise.resolve({ data: [], error: null }),
+    ])
+
+  if (matriculasError) {
+    throw matriculasError
+  }
+
+  if (asistenciasError) {
+    throw asistenciasError
+  }
+
+  const materiasCount = new Map<number, number>()
+  for (const row of matriculasRows ?? []) {
+    materiasCount.set(row.estudiante_id, (materiasCount.get(row.estudiante_id) ?? 0) + 1)
+  }
+
+  const asistenciasCount = new Map<number, number>()
+  for (const row of asistenciasRows ?? []) {
+    asistenciasCount.set(row.estudiante_id, (asistenciasCount.get(row.estudiante_id) ?? 0) + 1)
+  }
+
+  const resumenMap = new Map<
+    number,
+    {
+      totalMateriasSemana: number
+      asistenciasTotales: number
+      totalEsperadoSemestre: number
+    }
+  >()
+
+  for (const estudianteId of idsUnicos) {
+    const totalMateriasSemana = materiasCount.get(estudianteId) ?? 0
+    const asistenciasTotales = asistenciasCount.get(estudianteId) ?? 0
+
+    resumenMap.set(estudianteId, {
+      totalMateriasSemana,
+      asistenciasTotales,
+      totalEsperadoSemestre: totalMateriasSemana * semanaAcademica,
+    })
+  }
+
+  return resumenMap
+}
+
 export async function getDashboardMetrics(
   estudiante: Estudiante,
 ): Promise<DashboardMetrics> {

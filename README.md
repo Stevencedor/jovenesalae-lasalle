@@ -1,25 +1,36 @@
-# Asistencia App (React + Supabase)
+# Asistencia App
+![React 19.2.4](https://img.shields.io/badge/React-19.2.4-61DAFB?logo=react&logoColor=000)
+![TypeScript 5.9.3](https://img.shields.io/badge/TypeScript-5.9.3-3178C6?logo=typescript&logoColor=fff)
+![Vite 8.0.1](https://img.shields.io/badge/Vite-8.0.1-646CFF?logo=vite&logoColor=fff)
+![Supabase JS 2.99.3](https://img.shields.io/badge/Supabase_JS-2.99.3-3ECF8E?logo=supabase&logoColor=fff)
+![React Router 6.30.1](https://img.shields.io/badge/React_Router-6.30.1-CA4245?logo=reactrouter&logoColor=fff)
+![pnpm lockfile v9](https://img.shields.io/badge/pnpm-lockfile_v9-F69220?logo=pnpm&logoColor=fff)
 
-WebApp para el registro de asistencia de los estudiantes de Jovenes a la E.
+Aplicacion web para el seguimiento de asistencia de Jovenes a la E, con paneles por rol y gestion academica centralizada en Supabase.
 
-## Stack
+## Mejoras recientes
 
-- React + TypeScript + Vite
-- Supabase (Auth + Postgres)
-- pnpm
+- Experiencia de navegacion mas fluida: la estructura de las vistas se mantiene visible mientras se actualizan datos.
+- Carga inteligente: cache local en memoria y persistencia en sessionStorage para conservar estado entre navegacion y recarga del navegador.
+- Actualizacion en tiempo real: refresco de datos cuando realmente hay cambios en base de datos.
+- Mejor rendimiento del dashboard: reduccion de consultas repetitivas y recalculo controlado de metricas semestrales con TTL por segmento.
+- Flujo Tutor fortalecido: vista ejecutiva por grupos, edicion de Hermanos Menores y Hermanos Mayores, y gestion de asignaciones.
 
-## Funcionalidad implementada
+## Modulos principales
 
-- Landing publica
-- Pantalla de login segura (Supabase Auth)
-- Dashboard con metricas semanales/semestrales y KPIs
-- Vista de materias pendientes/completadas
-- Formulario interactivo de registro de asistencia
-- Panel de Hermano Mayor para ver progreso de su grupo
-- Diseño "Glassmorphism" con los colores de la Universidad de La Salle
-- Rutas protegidas por autenticacion y rol
+- Landing publica e inicio de sesion seguro.
+- Dashboard con indicadores semanales y semestrales.
+- Registro de asistencia por materias.
+- Panel de seguimiento para Hermano Mayor y Tutor.
+- Gestion de estudiantes y asignaciones por rol.
 
-## Configuracion local
+## Acceso por rol
+
+- Hermano_Menor: registra su asistencia y visualiza su progreso.
+- Hermano_Mayor: visualiza seguimiento de sus Hermanos Menores.
+- Tutor: vista global, gestion de grupos y edicion de estudiantes.
+
+## Inicio rapido local
 
 1. Instalar dependencias:
 
@@ -27,65 +38,48 @@ WebApp para el registro de asistencia de los estudiantes de Jovenes a la E.
 pnpm install
 ```
 
-2. Crear variables de entorno:
+2. Configurar entorno:
 
 ```bash
 cp .env.example .env
 ```
 
-3. Completar en `.env`:
-
-```env
-VITE_SUPABASE_URL=https://TU-PROYECTO.supabase.co
-VITE_SUPABASE_ANON_KEY=TU_ANON_KEY
-```
-
-4. Crear o configurar la Base de Datos:
-
-- Crea tablas en PostgresSQL o Supabase.
-Debes asegurarte de:
-- Configurar las tablas principales (`estudiantes`, `materias`, `semanas`, `asistencias`) en tu proyecto de Supabase.
-- Asegurar que la tabla de `estudiantes` tenga al usuario creado utilizando el servicio `auth.users` de Supabase, el cual maneja la encripcion de constraseñas de forma segura. El frontend consultara el login contra dicha tabla.
-
-5. Correr en local:
-
-```bash
-pnpm dev
-```
-
-## Despliegue publico
-
-- Frontend: Vercel o Netlify (desde GitHub)
-- Base: Supabase
-- Variables de entorno en plataforma de despliegue
-
-## Modelo de acceso recomendado
-
-- Usuarios autenticados en Supabase Auth
-- El perfil se resuelve por email (`auth.user.email` = `estudiantes.email`)
-- `rol = Hermano_Menor`: ve y registra su propia asistencia
-- `rol = Hermano_Mayor`: ve resumen de sus estudiantes asignados
-- Solo estudiantes con `status = Activo` pueden entrar al flujo
-
-## Parametros para localhost
-
-Debes configurar estos 2 valores en `.env`:
+3. Completar variables en `.env`:
 
 ```env
 VITE_SUPABASE_URL=https://<project-ref>.supabase.co
 VITE_SUPABASE_ANON_KEY=<anon-public-key>
 ```
 
-Donde encontrarlos en Supabase:
+4. Ejecutar proyecto:
 
-- `Project Settings > API > Project URL`
-- `Project Settings > API > Project API keys > anon public`
+```bash
+pnpm dev
+```
 
-## Rutas
+5. Verificar tipos (opcional recomendado):
+
+```bash
+pnpm exec tsc -p tsconfig.app.json --noEmit
+```
+
+## Configuracion de base de datos
+
+- Configura en Supabase las tablas principales: `estudiantes`, `materias`, `semanas`, `asistencias`, `estudiante_materias`.
+- Usa Supabase Auth como origen de autenticacion y vincula el perfil por email con la tabla `estudiantes`.
+- Revisa los scripts del directorio `supabase/` para estructura y migraciones.
+
+## Rutas principales
 
 - `/` Landing publica
-- `/login` Login
-- `/dashboard` Resumen
-- `/materias` Registro por materia
-- `/asistencia/:materiaId` Formulario
-- `/registro` Panel hermano mayor
+- `/login` Inicio de sesion
+- `/dashboard` Resumen y KPIs
+- `/materias` Materias del Hermano Menor
+- `/asistencia/:materiaId` Registro de asistencia
+- `/registro` Panel de seguimiento (Hermano Mayor y Tutor)
+
+## Despliegue
+
+- Frontend: Vercel o Netlify
+- Backend y datos: Supabase
+- Configura variables de entorno en la plataforma de despliegue

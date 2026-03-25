@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { useAuth } from '../context/useAuth'
+import { supabase } from '../lib/supabase'
 import {
   agregarMatricula,
   crearEstudiante,
@@ -24,6 +25,43 @@ import type {
   TipoMatricula,
   TutorGrupoResumen,
 } from '../types/domain'
+
+type RegistroCacheEntry = {
+  rows: ResumenAsistencia[]
+  tutorGroups: TutorGrupoResumen[]
+  title: string
+  hermanosMayores: Pick<Estudiante, 'id' | 'nombre'>[]
+  semanaActiva: Semana | null
+  semanas: Semana[]
+}
+
+const registroViewCache = new Map<string, RegistroCacheEntry>()
+const REGISTRO_CACHE_PREFIX = 'registro-cache:v1:'
+
+function getRegistroCacheKey(profileId: number, rol: string) {
+  return `${profileId}:${rol}`
+}
+
+function readRegistroCacheFromSession(cacheKey: string): RegistroCacheEntry | null {
+  try {
+    const raw = sessionStorage.getItem(`${REGISTRO_CACHE_PREFIX}${cacheKey}`)
+    if (!raw) {
+      return null
+    }
+    return JSON.parse(raw) as RegistroCacheEntry
+  } catch {
+    return null
+  }
+}
+
+function saveRegistroCache(cacheKey: string, entry: RegistroCacheEntry) {
+  registroViewCache.set(cacheKey, entry)
+  try {
+    sessionStorage.setItem(`${REGISTRO_CACHE_PREFIX}${cacheKey}`, JSON.stringify(entry))
+  } catch {
+    // Ignore storage quota/transient errors and keep in-memory cache.
+  }
+}
 
 function stateClass(text: ResumenAsistencia['progreso']) {
   if (text === 'Completado') {
@@ -86,7 +124,8 @@ export function RegistroPage() {
   const [rows, setRows] = useState<ResumenAsistencia[]>([])
   const [tutorGroups, setTutorGroups] = useState<TutorGrupoResumen[]>([])
   const [title, setTitle] = useState('Resumen semanal')
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -125,26 +164,33 @@ export function RegistroPage() {
   const [editingEstudianteSemestre, setEditingEstudianteSemestre] = useState<number | null>(null)
   const [assigningHmId, setAssigningHmId] = useState<number | null>(null)
   const [menorSinHmId, setMenorSinHmId] = useState<number | ''>('')
+  const [refreshToken, setRefreshToken] = useState(0)
 
   const loadData = useCallback(async (semanaIdToLoad?: number) => {
     const targetId = semanaIdToLoad
     if (!targetId || !profile) return
 
     setLoading(true)
+    setError(null)
     try {
       const [hmList, allSemanas] = await Promise.all([
         getHermanosMayores(),
         semanas.length === 0 ? getTodasLasSemanas() : Promise.resolve(semanas),
       ])
 
+      let nextRows: ResumenAsistencia[] = []
+      let nextTutorGroups: TutorGrupoResumen[] = []
+
       if (profile.rol === 'Tutor') {
         const grupos = await getResumenTutorGeneral(targetId)
-        setTutorGroups(grupos)
-        setRows([])
+        nextTutorGroups = grupos
+        setTutorGroups(nextTutorGroups)
+        setRows(nextRows)
       } else {
         const resumen = await getResumenHermanoMayor(profile.id, targetId)
-        setRows(resumen)
-        setTutorGroups([])
+        nextRows = resumen
+        setRows(nextRows)
+        setTutorGroups(nextTutorGroups)
       }
 
       if (semanas.length === 0) setSemanas(allSemanas)
@@ -156,12 +202,59 @@ export function RegistroPage() {
       }
 
       setHermanosMayores(hmList)
+      setHasLoadedOnce(true)
+
+      const cacheKey = getRegistroCacheKey(profile.id, profile.rol)
+      saveRegistroCache(cacheKey, {
+        rows: nextRows,
+        tutorGroups: nextTutorGroups,
+        title: current ? `Resumen semana ${current.semana_academica}` : 'Resumen semanal',
+        hermanosMayores: hmList,
+        semanaActiva: current ?? null,
+        semanas: allSemanas,
+      })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo cargar el panel')
     } finally {
       setLoading(false)
     }
   }, [profile, semanas])
+
+  const refreshResumenOnly = useCallback(async (semanaId: number) => {
+    if (!profile) {
+      return
+    }
+
+    const cacheKey = getRegistroCacheKey(profile.id, profile.rol)
+    const cached = registroViewCache.get(cacheKey) ?? readRegistroCacheFromSession(cacheKey)
+    if (!cached) {
+      setRefreshToken((prev) => prev + 1)
+      return
+    }
+
+    try {
+      let nextRows: ResumenAsistencia[] = []
+      let nextTutorGroups: TutorGrupoResumen[] = []
+
+      if (profile.rol === 'Tutor') {
+        nextTutorGroups = await getResumenTutorGeneral(semanaId)
+        setTutorGroups(nextTutorGroups)
+        setRows([])
+      } else {
+        nextRows = await getResumenHermanoMayor(profile.id, semanaId)
+        setRows(nextRows)
+        setTutorGroups([])
+      }
+
+      saveRegistroCache(cacheKey, {
+        ...cached,
+        rows: nextRows,
+        tutorGroups: nextTutorGroups,
+      })
+    } catch {
+      setRefreshToken((prev) => prev + 1)
+    }
+  }, [profile])
 
   async function loadCreateOptionalMaterias(semestre: number) {
     const prev = await getMateriasPorSemestres(
@@ -214,16 +307,82 @@ export function RegistroPage() {
   useEffect(() => {
     if (!profile || (profile.rol !== 'Hermano_Mayor' && profile.rol !== 'Tutor')) return
 
+    const cacheKey = getRegistroCacheKey(profile.id, profile.rol)
+    const cached = registroViewCache.get(cacheKey) ?? readRegistroCacheFromSession(cacheKey)
+    if (cached) {
+      registroViewCache.set(cacheKey, cached)
+      setRows(cached.rows)
+      setTutorGroups(cached.tutorGroups)
+      setTitle(cached.title)
+      setHermanosMayores(cached.hermanosMayores)
+      setSemanaActiva(cached.semanaActiva)
+      setSemanas(cached.semanas)
+      setHasLoadedOnce(true)
+    }
+
+    const shouldFetch = refreshToken > 0 || !cached
+    if (!shouldFetch) {
+      return
+    }
+
     getSemanaActual().then((actual) => {
       if (actual) {
         loadData(actual.id)
       } else {
         setRows([])
         setTitle('No hay semana activa')
-        setLoading(false)
+        setHasLoadedOnce(true)
       }
     })
-  }, [loadData, profile])
+  }, [loadData, profile, refreshToken])
+
+  useEffect(() => {
+    if (!profile || (profile.rol !== 'Hermano_Mayor' && profile.rol !== 'Tutor')) {
+      return
+    }
+
+    let refreshTimeout: ReturnType<typeof setTimeout> | null = null
+
+    const queueFullRefresh = () => {
+      if (refreshTimeout) {
+        clearTimeout(refreshTimeout)
+      }
+
+      refreshTimeout = setTimeout(() => {
+        setRefreshToken((prev) => prev + 1)
+      }, 300)
+    }
+
+    const queueResumenRefresh = () => {
+      if (refreshTimeout) {
+        clearTimeout(refreshTimeout)
+      }
+
+      refreshTimeout = setTimeout(() => {
+        const targetSemanaId = semanaActiva?.id
+        if (!targetSemanaId) {
+          queueFullRefresh()
+          return
+        }
+        void refreshResumenOnly(targetSemanaId)
+      }, 300)
+    }
+
+    const channel = supabase
+      .channel(`registro-live-${profile.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'asistencias' }, queueResumenRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'estudiante_materias' }, queueResumenRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'estudiantes' }, queueFullRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'semanas' }, queueFullRefresh)
+      .subscribe()
+
+    return () => {
+      if (refreshTimeout) {
+        clearTimeout(refreshTimeout)
+      }
+      supabase.removeChannel(channel)
+    }
+  }, [profile, refreshResumenOnly, semanaActiva?.id])
 
   useEffect(() => {
     if (!showCreateForm) {
@@ -453,10 +612,6 @@ export function RegistroPage() {
     }
   }
 
-  if (loading) {
-    return <div className="card">Cargando panel...</div>
-  }
-
   if (profile?.rol !== 'Hermano_Mayor' && profile?.rol !== 'Tutor') {
     return <div className="card">Esta vista esta habilitada solo para hermano mayor.</div>
   }
@@ -480,6 +635,7 @@ export function RegistroPage() {
         <div>
           <p className="eyebrow">Panel de seguimiento</p>
           <h1>{title}</h1>
+          {loading && hasLoadedOnce ? <small>Actualizando datos...</small> : null}
         </div>
 
         {semanas.length > 0 && semanaActiva?.corte_semestre && (

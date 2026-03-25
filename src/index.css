@@ -232,8 +232,8 @@ button:disabled {
 
 .grid-features article:hover,
 .card:hover {
-  transform: translateY(-4px);
-  box-shadow: var(--shadow-lg);
+  transform: none;
+  box-shadow: var(--shadow);
 }
 
 .grid-features article h3 {
@@ -518,7 +518,7 @@ select:focus {
 }
 
 .kpi-card:hover {
-  transform: translateY(-2px);
+  transform: none;
 }
 
 .kpi-card h3 {
