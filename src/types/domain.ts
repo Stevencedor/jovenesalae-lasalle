@@ -1,4 +1,4 @@
-export type RolUsuario = 'Hermano_Mayor' | 'Hermano_Menor'
+export type RolUsuario = 'Hermano_Mayor' | 'Hermano_Menor' | 'Tutor'
 
 export type EstadoProgreso = 'Sin registro' | 'En progreso' | 'Completado'
 
@@ -69,6 +69,15 @@ export interface ResumenAsistencia {
   materias: number
   progreso: EstadoProgreso
   estudianteData: Estudiante
+}
+
+export interface TutorGrupoResumen {
+  hermanoMayor: Estudiante | null
+  estudiantes: ResumenAsistencia[]
+  totalEstudiantes: number
+  completados: number
+  enProgreso: number
+  sinRegistro: number
 }
 
 export interface DashboardMetrics {

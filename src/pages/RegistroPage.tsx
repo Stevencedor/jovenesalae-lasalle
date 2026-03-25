@@ -9,6 +9,7 @@ import {
   getMatriculasEstudiante,
   getMateriasSemestre,
   getResumenHermanoMayor,
+  getResumenTutorGeneral,
   getSemanaActual,
   getTextoReporteAsistencia,
   getTodasLasSemanas,
@@ -21,6 +22,7 @@ import type {
   ResumenAsistencia,
   Semana,
   TipoMatricula,
+  TutorGrupoResumen,
 } from '../types/domain'
 
 function stateClass(text: ResumenAsistencia['progreso']) {
@@ -82,12 +84,15 @@ function toggleNumber(list: number[], value: number) {
 export function RegistroPage() {
   const { profile } = useAuth()
   const [rows, setRows] = useState<ResumenAsistencia[]>([])
+  const [tutorGroups, setTutorGroups] = useState<TutorGrupoResumen[]>([])
   const [title, setTitle] = useState('Resumen semanal')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editingData, setEditingData] = useState<Partial<Estudiante>>({})
+  const [editingHmId, setEditingHmId] = useState<number | null>(null)
+  const [editingHmData, setEditingHmData] = useState<Partial<Estudiante>>({})
   const [saving, setSaving] = useState(false)
   const [hermanosMayores, setHermanosMayores] = useState<Pick<Estudiante, 'id' | 'nombre'>[]>([])
   const [semanaActiva, setSemanaActiva] = useState<Semana | null>(null)
@@ -102,6 +107,7 @@ export function RegistroPage() {
     semestre: 1,
     grupo: 1,
     rol: 'Hermano_Menor' as 'Hermano_Mayor' | 'Hermano_Menor',
+    hermano_mayor: '' as number | '',
     telefono: '',
     ciudad: '',
     materiasRepeticionIds: [] as number[],
@@ -117,6 +123,8 @@ export function RegistroPage() {
   const [tipoAgregar, setTipoAgregar] = useState<TipoMatricula>('normal')
   const [loadingMatriculas, setLoadingMatriculas] = useState(false)
   const [editingEstudianteSemestre, setEditingEstudianteSemestre] = useState<number | null>(null)
+  const [assigningHmId, setAssigningHmId] = useState<number | null>(null)
+  const [menorSinHmId, setMenorSinHmId] = useState<number | ''>('')
 
   const loadData = useCallback(async (semanaIdToLoad?: number) => {
     const targetId = semanaIdToLoad
@@ -124,11 +132,20 @@ export function RegistroPage() {
 
     setLoading(true)
     try {
-      const [resumen, hmList, allSemanas] = await Promise.all([
-        getResumenHermanoMayor(profile.id, targetId),
+      const [hmList, allSemanas] = await Promise.all([
         getHermanosMayores(),
         semanas.length === 0 ? getTodasLasSemanas() : Promise.resolve(semanas),
       ])
+
+      if (profile.rol === 'Tutor') {
+        const grupos = await getResumenTutorGeneral(targetId)
+        setTutorGroups(grupos)
+        setRows([])
+      } else {
+        const resumen = await getResumenHermanoMayor(profile.id, targetId)
+        setRows(resumen)
+        setTutorGroups([])
+      }
 
       if (semanas.length === 0) setSemanas(allSemanas)
 
@@ -138,7 +155,6 @@ export function RegistroPage() {
         setTitle(`Resumen semana ${current.semana_academica}`)
       }
 
-      setRows(resumen)
       setHermanosMayores(hmList)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo cargar el panel')
@@ -196,7 +212,7 @@ export function RegistroPage() {
   }
 
   useEffect(() => {
-    if (!profile || profile.rol !== 'Hermano_Mayor') return
+    if (!profile || (profile.rol !== 'Hermano_Mayor' && profile.rol !== 'Tutor')) return
 
     getSemanaActual().then((actual) => {
       if (actual) {
@@ -233,9 +249,35 @@ export function RegistroPage() {
       await updateEstudiante(id, editingData)
       setEditingId(null)
       toast.success('Estudiante actualizado correctamente')
-      loadData()
+      if (semanaActiva) {
+        loadData(semanaActiva.id)
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error al guardar los datos del estudiante')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleSaveHermanoMayor = async (id: number) => {
+    if (
+      editingHmData.semestre !== undefined &&
+      (editingHmData.semestre < 1 || editingHmData.semestre > 10)
+    ) {
+      toast.error('El semestre debe ser un valor numerico entre 1 y 10.')
+      return
+    }
+
+    setSaving(true)
+    try {
+      await updateEstudiante(id, editingHmData)
+      setEditingHmId(null)
+      toast.success('Hermano mayor actualizado correctamente')
+      if (semanaActiva) {
+        loadData(semanaActiva.id)
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al guardar los datos del hermano mayor')
     } finally {
       setSaving(false)
     }
@@ -267,6 +309,20 @@ export function RegistroPage() {
       return
     }
 
+    const hermanoMayorAsignado =
+      newStudent.rol === 'Hermano_Menor'
+        ? profile.rol === 'Hermano_Mayor'
+          ? profile.id
+          : newStudent.hermano_mayor
+            ? Number(newStudent.hermano_mayor)
+            : null
+        : null
+
+    if (newStudent.rol === 'Hermano_Menor' && !hermanoMayorAsignado) {
+      toast.error('Debes asignar un hermano mayor al hermano menor')
+      return
+    }
+
     setCreatingStudent(true)
     try {
       const { data: existing } = await (await import('../lib/supabase')).supabase
@@ -283,7 +339,7 @@ export function RegistroPage() {
 
       await crearEstudiante({
         ...newStudent,
-        hermano_mayor: profile.id,
+        hermano_mayor: hermanoMayorAsignado,
       })
 
       toast.success(
@@ -297,6 +353,7 @@ export function RegistroPage() {
         semestre: 1,
         grupo: 1,
         rol: 'Hermano_Menor',
+        hermano_mayor: '',
         telefono: '',
         ciudad: '',
         materiasRepeticionIds: [],
@@ -374,11 +431,33 @@ export function RegistroPage() {
     }
   }
 
+  const menoresSinAsignar =
+    tutorGroups.find((group) => group.hermanoMayor === null)?.estudiantes ?? []
+
+  async function handleAsignarHermanoMenor(hmId: number) {
+    if (!menorSinHmId) {
+      toast.error('Selecciona un hermano menor sin asignar')
+      return
+    }
+
+    try {
+      await updateEstudiante(Number(menorSinHmId), { hermano_mayor: hmId })
+      toast.success('Hermano menor asignado correctamente')
+      setAssigningHmId(null)
+      setMenorSinHmId('')
+      if (semanaActiva) {
+        await loadData(semanaActiva.id)
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo asignar el hermano menor')
+    }
+  }
+
   if (loading) {
     return <div className="card">Cargando panel...</div>
   }
 
-  if (profile?.rol !== 'Hermano_Mayor') {
+  if (profile?.rol !== 'Hermano_Mayor' && profile?.rol !== 'Tutor') {
     return <div className="card">Esta vista esta habilitada solo para hermano mayor.</div>
   }
 
@@ -420,12 +499,14 @@ export function RegistroPage() {
             </select>
           </label>
         )}
-        <button className="btn-primary btn-sm" onClick={() => setShowCreateForm((v) => !v)}>
-          {showCreateForm ? 'Cancelar' : 'Nuevo estudiante'}
-        </button>
+        {(profile?.rol === 'Hermano_Mayor' || profile?.rol === 'Tutor') ? (
+          <button className="btn-primary btn-sm" onClick={() => setShowCreateForm((v) => !v)}>
+            {showCreateForm ? 'Cancelar' : 'Nuevo estudiante'}
+          </button>
+        ) : null}
       </div>
 
-      {showCreateForm && (
+      {showCreateForm && (profile?.rol === 'Hermano_Mayor' || profile?.rol === 'Tutor') && (
         <form
           className="card"
           onSubmit={handleCreateStudent}
@@ -475,18 +556,6 @@ export function RegistroPage() {
             />
           </label>
           <label>
-            Grupo
-            <input
-              required
-              type="number"
-              min="1"
-              value={newStudent.grupo}
-              onChange={(e) =>
-                setNewStudent({ ...newStudent, grupo: parseInt(e.target.value, 10) || 1 })
-              }
-            />
-          </label>
-          <label>
             Rol
             <select
               value={newStudent.rol}
@@ -501,6 +570,29 @@ export function RegistroPage() {
               <option value="Hermano_Mayor">Hermano Mayor</option>
             </select>
           </label>
+
+          {profile?.rol === 'Tutor' && newStudent.rol === 'Hermano_Menor' ? (
+            <label>
+              Hermano Mayor asignado
+              <select
+                value={newStudent.hermano_mayor}
+                onChange={(e) =>
+                  setNewStudent({
+                    ...newStudent,
+                    hermano_mayor: e.target.value ? parseInt(e.target.value, 10) : '',
+                  })
+                }
+              >
+                <option value="">Selecciona un hermano mayor</option>
+                {hermanosMayores.map((hm) => (
+                  <option key={hm.id} value={hm.id}>
+                    {hm.nombre}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+
           <label>
             Telefono (opcional)
             <input
@@ -516,7 +608,8 @@ export function RegistroPage() {
             />
           </label>
 
-          <div className="card" style={{ gridColumn: '1 / -1', padding: '1rem' }}>
+          {newStudent.rol === 'Hermano_Menor' ? (
+            <div className="card" style={{ gridColumn: '1 / -1', padding: '1rem' }}>
             <h3 style={{ marginBottom: '0.75rem' }}>Debe materias de semestres anteriores</h3>
             {materiasPrevias.length === 0 ? (
               <small style={{ color: 'var(--ink-muted)' }}>No hay materias previas disponibles.</small>
@@ -542,9 +635,11 @@ export function RegistroPage() {
                 ))}
               </div>
             )}
-          </div>
+            </div>
+          ) : null}
 
-          <div className="card" style={{ gridColumn: '1 / -1', padding: '1rem' }}>
+          {newStudent.rol === 'Hermano_Menor' ? (
+            <div className="card" style={{ gridColumn: '1 / -1', padding: '1rem' }}>
             <h3 style={{ marginBottom: '0.75rem' }}>Cursa materias del siguiente semestre</h3>
             {materiasSiguiente.length === 0 ? (
               <small style={{ color: 'var(--ink-muted)' }}>
@@ -572,7 +667,8 @@ export function RegistroPage() {
                 ))}
               </div>
             )}
-          </div>
+            </div>
+          ) : null}
 
           <div
             style={{
@@ -597,10 +693,383 @@ export function RegistroPage() {
         </form>
       )}
 
-      <div className="list-card">
-        {rows.length === 0 ? (
-          <p>No hay estudiantes asignados para mostrar.</p>
-        ) : (
+      {profile?.rol === 'Tutor' ? (
+        <div className="stack-lg">
+          {tutorGroups.length === 0 ? (
+            <div className="card">
+              <p>No hay hermanos menores registrados para mostrar.</p>
+            </div>
+          ) : (
+            tutorGroups.map((grupo) => (
+              <article key={grupo.hermanoMayor?.id ?? 'sin_asignar'} className="card stack-md">
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+                  <div>
+                    <p className="eyebrow">Grupo liderado por</p>
+                    <h3 style={{ marginBottom: '0.3rem' }}>
+                      {grupo.hermanoMayor?.nombre ?? 'Sin hermano mayor asignado'}
+                    </h3>
+                    <small style={{ color: 'var(--ink-muted)' }}>
+                      Total estudiantes: {grupo.totalEstudiantes}
+                    </small>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <span className="pill">Total: {grupo.totalEstudiantes}</span>
+                    <span className="pill pill-ok">Completado: {grupo.completados}</span>
+                    <span className="pill pill-warn">En progreso: {grupo.enProgreso}</span>
+                    <span className="pill pill-danger">Sin registro: {grupo.sinRegistro}</span>
+                  </div>
+                </div>
+
+                {grupo.hermanoMayor ? (
+                  editingHmId === grupo.hermanoMayor.id ? (
+                    <div className="card" style={{ display: 'grid', gap: '0.75rem' }}>
+                      <h3>Editando Hermano Mayor: {grupo.hermanoMayor.nombre}</h3>
+                      <div
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                          gap: '0.75rem',
+                        }}
+                      >
+                        <label>
+                          Telefono
+                          <input
+                            type="text"
+                            value={editingHmData.telefono ?? ''}
+                            onChange={(e) =>
+                              setEditingHmData({ ...editingHmData, telefono: e.target.value })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Direccion
+                          <input
+                            type="text"
+                            value={editingHmData.direccion ?? ''}
+                            onChange={(e) =>
+                              setEditingHmData({ ...editingHmData, direccion: e.target.value })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Email personal
+                          <input
+                            type="email"
+                            value={editingHmData.email_personal ?? ''}
+                            onChange={(e) =>
+                              setEditingHmData({ ...editingHmData, email_personal: e.target.value })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Ciudad
+                          <input
+                            type="text"
+                            value={editingHmData.ciudad ?? ''}
+                            onChange={(e) =>
+                              setEditingHmData({ ...editingHmData, ciudad: e.target.value })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Semestre
+                          <input
+                            type="number"
+                            min="1"
+                            max="10"
+                            value={editingHmData.semestre ?? ''}
+                            onChange={(e) =>
+                              setEditingHmData({
+                                ...editingHmData,
+                                semestre: parseInt(e.target.value, 10) || 1,
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Estado
+                          <select
+                            value={editingHmData.status}
+                            onChange={(e) =>
+                              setEditingHmData({
+                                ...editingHmData,
+                                status: e.target.value as Estudiante['status'],
+                              })
+                            }
+                          >
+                            <option value="Activo">Activo</option>
+                            <option value="Inactivo">Inactivo</option>
+                            <option value="Graduado">Graduado</option>
+                            <option value="Retirado">Retirado</option>
+                          </select>
+                        </label>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                        <button
+                          type="button"
+                          className="btn-ghost btn-sm"
+                          onClick={() => {
+                            setEditingHmId(null)
+                            setEditingHmData({})
+                          }}
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-primary btn-sm"
+                          onClick={() => handleSaveHermanoMayor(grupo.hermanoMayor!.id)}
+                          disabled={saving}
+                        >
+                          {saving ? 'Guardando...' : 'Guardar hermano mayor'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                      <button
+                        type="button"
+                        className="btn-ghost btn-sm"
+                        onClick={() => {
+                          setEditingHmId(grupo.hermanoMayor!.id)
+                          setEditingHmData({ ...grupo.hermanoMayor! })
+                        }}
+                      >
+                        Editar hermano mayor
+                      </button>
+                    </div>
+                  )
+                ) : null}
+
+                {grupo.hermanoMayor && menoresSinAsignar.length > 0 ? (
+                  <div className="card" style={{ padding: '0.85rem', display: 'grid', gap: '0.65rem' }}>
+                    <small style={{ color: 'var(--ink-muted)' }}>
+                      Sin hermanos menores asignados
+                    </small>
+                    {assigningHmId === grupo.hermanoMayor.id ? (
+                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'end' }}>
+                        <label style={{ margin: 0, minWidth: '250px' }}>
+                          Hermano menor sin asignar
+                          <select
+                            value={menorSinHmId}
+                            onChange={(e) =>
+                              setMenorSinHmId(e.target.value ? parseInt(e.target.value, 10) : '')
+                            }
+                          >
+                            <option value="">Selecciona un hermano menor</option>
+                            {menoresSinAsignar.map((item) => (
+                              <option key={item.estudianteId} value={item.estudianteId}>
+                                {item.estudianteData.nombre} ({item.estudianteData.cedula})
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <button
+                          type="button"
+                          className="btn-primary btn-sm"
+                          disabled={!menorSinHmId}
+                          onClick={() => handleAsignarHermanoMenor(grupo.hermanoMayor!.id)}
+                        >
+                          Confirmar asignacion
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-ghost btn-sm"
+                          onClick={() => {
+                            setAssigningHmId(null)
+                            setMenorSinHmId('')
+                          }}
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn-primary btn-sm"
+                        onClick={() => setAssigningHmId(grupo.hermanoMayor!.id)}
+                        disabled={menoresSinAsignar.length === 0}
+                      >
+                        {menoresSinAsignar.length === 0
+                          ? 'No hay hermanos menores disponibles'
+                          : 'Asignar hermanos menores'}
+                      </button>
+                    )}
+                  </div>
+                ) : null}
+
+                <div style={{ display: 'grid', gap: '0.6rem' }}>
+                  {grupo.estudiantes.map((item) => (
+                    editingId === item.estudianteId ? (
+                      <article
+                        key={item.estudianteId}
+                        className="card"
+                        style={{ display: 'grid', gap: '0.75rem' }}
+                      >
+                        <h3>Editando a {item.estudianteData.nombre}</h3>
+                        <div
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                            gap: '0.75rem',
+                          }}
+                        >
+                          <label>
+                            Telefono
+                            <input
+                              type="text"
+                              value={editingData.telefono ?? ''}
+                              onChange={(e) =>
+                                setEditingData({ ...editingData, telefono: e.target.value })
+                              }
+                            />
+                          </label>
+                          <label>
+                            Direccion
+                            <input
+                              type="text"
+                              value={editingData.direccion ?? ''}
+                              onChange={(e) =>
+                                setEditingData({ ...editingData, direccion: e.target.value })
+                              }
+                            />
+                          </label>
+                          <label>
+                            Email personal
+                            <input
+                              type="email"
+                              value={editingData.email_personal ?? ''}
+                              onChange={(e) =>
+                                setEditingData({ ...editingData, email_personal: e.target.value })
+                              }
+                            />
+                          </label>
+                          <label>
+                            Ciudad
+                            <input
+                              type="text"
+                              value={editingData.ciudad ?? ''}
+                              onChange={(e) =>
+                                setEditingData({ ...editingData, ciudad: e.target.value })
+                              }
+                            />
+                          </label>
+                          <label>
+                            Semestre
+                            <input
+                              type="number"
+                              min="1"
+                              max="10"
+                              value={editingData.semestre ?? ''}
+                              onChange={(e) =>
+                                setEditingData({
+                                  ...editingData,
+                                  semestre: parseInt(e.target.value, 10) || 1,
+                                })
+                              }
+                            />
+                          </label>
+                          <label>
+                            Hermano Mayor asignado
+                            <select
+                              value={editingData.hermano_mayor ?? ''}
+                              onChange={(e) =>
+                                setEditingData({
+                                  ...editingData,
+                                  hermano_mayor: parseInt(e.target.value, 10) || null,
+                                })
+                              }
+                            >
+                              <option value="">Sin asignar</option>
+                              {hermanosMayores.map((hm) => (
+                                <option key={hm.id} value={hm.id}>
+                                  {hm.nombre}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label>
+                            Estado
+                            <select
+                              value={editingData.status}
+                              onChange={(e) =>
+                                setEditingData({
+                                  ...editingData,
+                                  status: e.target.value as Estudiante['status'],
+                                })
+                              }
+                            >
+                              <option value="Activo">Activo</option>
+                              <option value="Inactivo">Inactivo</option>
+                              <option value="Graduado">Graduado</option>
+                              <option value="Retirado">Retirado</option>
+                            </select>
+                          </label>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                          <button className="btn-ghost btn-sm" onClick={() => setEditingId(null)}>
+                            Cancelar
+                          </button>
+                          <button
+                            className="btn-primary btn-sm"
+                            onClick={() => handleSave(item.estudianteId)}
+                            disabled={saving}
+                          >
+                            {saving ? 'Guardando...' : 'Guardar datos'}
+                          </button>
+                        </div>
+                      </article>
+                    ) : (
+                      <div
+                        key={item.estudianteId}
+                        style={{
+                          border: '1px solid var(--line)',
+                          borderRadius: 'var(--radius-sm)',
+                          padding: '0.75rem',
+                          display: 'grid',
+                          gap: '0.35rem',
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          <strong>{item.estudianteData.nombre}</strong>
+                          <span className={stateClass(item.progreso)}>{item.progreso}</span>
+                        </div>
+                        <small style={{ color: 'var(--ink-muted)' }}>
+                          Cedula: {item.estudianteData.cedula} | Semestre: {item.estudianteData.semestre} | Grupo: {item.estudianteData.grupo}
+                        </small>
+                        <small style={{ color: 'var(--ink-muted)' }}>
+                          Asistencia semanal: {item.asistenciaRealizada}/{item.materias} | Estado: {item.estudianteData.status}
+                        </small>
+                        <small style={{ color: 'var(--ink-muted)' }}>
+                          Telefono: {item.estudianteData.telefono ?? '-'} | Ciudad: {item.estudianteData.ciudad ?? '-'}
+                        </small>
+                        <small style={{ color: 'var(--ink-muted)' }}>
+                          Correo institucional: {item.estudianteData.email} | Correo personal: {item.estudianteData.email_personal ?? '-'}
+                        </small>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                          <button
+                            className="btn-ghost btn-sm"
+                            onClick={() => {
+                              setEditingId(item.estudianteId)
+                              setEditingData(item.estudianteData)
+                            }}
+                          >
+                            Editar
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  ))}
+                </div>
+              </article>
+            ))
+          )}
+        </div>
+      ) : (
+        <div className="list-card">
+          {rows.length === 0 ? (
+            <p>No hay estudiantes asignados para mostrar.</p>
+          ) : (
           rows.map((item) => {
             if (editingId === item.estudianteId) {
               return (
@@ -653,20 +1122,6 @@ export function RegistroPage() {
                         type="text"
                         value={editingData.ciudad ?? ''}
                         onChange={(e) => setEditingData({ ...editingData, ciudad: e.target.value })}
-                      />
-                    </label>
-                    <label>
-                      Grupo
-                      <input
-                        type="number"
-                        min="1"
-                        value={editingData.grupo ?? ''}
-                        onChange={(e) =>
-                          setEditingData({
-                            ...editingData,
-                            grupo: parseInt(e.target.value, 10) || 1,
-                          })
-                        }
                       />
                     </label>
                     <label>
@@ -906,8 +1361,9 @@ export function RegistroPage() {
               </article>
             )
           })
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </section>
   )
 }

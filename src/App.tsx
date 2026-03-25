@@ -10,7 +10,7 @@ import { MatriculaConfirmacionPage } from './pages/MatriculaConfirmacionPage'
 import { MateriasPage } from './pages/MateriasPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { PublicLanding } from './pages/PublicLanding'
-import { RegistroPage } from './pages/RegistroPage'
+import { RegistroPage } from './pages/RegistroPage.tsx'
 
 function App() {
   return (
@@ -25,13 +25,23 @@ function App() {
             <Route element={<AppLayout />}>
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/matricula/confirmar" element={<MatriculaConfirmacionPage />} />
-              <Route path="/materias" element={<MateriasPage />} />
-              <Route path="/asistencia/:materiaId" element={<AsistenciaPage />} />
+              <Route
+                path="/materias"
+                element={<ProtectedRoute allowedRoles={['Hermano_Menor']} />}
+              >
+                <Route index element={<MateriasPage />} />
+              </Route>
+              <Route
+                path="/asistencia/:materiaId"
+                element={<ProtectedRoute allowedRoles={['Hermano_Menor']} />}
+              >
+                <Route index element={<AsistenciaPage />} />
+              </Route>
               <Route path="/perfil" element={<ProfilePage />} />
               <Route
                 path="/registro"
                 element={
-                  <ProtectedRoute allowedRoles={['Hermano_Mayor']} />
+                  <ProtectedRoute allowedRoles={['Hermano_Mayor', 'Tutor']} />
                 }
               >
                 <Route index element={<RegistroPage />} />
