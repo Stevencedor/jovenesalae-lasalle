@@ -83,3 +83,20 @@ pnpm exec tsc -p tsconfig.app.json --noEmit
 - Frontend: Vercel o Netlify
 - Backend y datos: Supabase
 - Configura variables de entorno en la plataforma de despliegue
+
+## Automatizacion semanal de semanas academicas
+
+Se agrego un flujo desatendido para crear la siguiente semana academica todos los lunes.
+
+### Logica implementada
+
+- Toma la ultima semana registrada en `semanas`.
+- Calcula la nueva semana como:
+  - `fecha_inicio = ultimo_fecha_fin + 1 dia`
+  - `fecha_fin = fecha_inicio + 6 dias`
+- Calcula el periodo (`corte_semestre`) desde la nueva `fecha_inicio`:
+  - Mes 1-6 -> `YYYY-1`
+  - Mes 7-12 -> `YYYY-2`
+- Si el periodo no cambia, incrementa `semana_academica`.
+- Si cambia el periodo, reinicia `semana_academica` en `1`.
+- Es idempotente: si ya existe la semana por rango de fechas, no inserta duplicados.
