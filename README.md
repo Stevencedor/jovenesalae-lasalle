@@ -100,3 +100,7 @@ Se agrego un flujo desatendido para crear la siguiente semana academica todos lo
 - Si el periodo no cambia, incrementa `semana_academica`.
 - Si cambia el periodo, reinicia `semana_academica` en `1`.
 - Es idempotente: si ya existe la semana por rango de fechas, no inserta duplicados.
+- Detecta semanas especiales de calendario en Colombia:
+  - Semana Santa (lunes a domingo de Semana Santa).
+  - Receso academico de octubre (segunda semana de octubre, de lunes a domingo).
+- Las semanas especiales se crean normalmente, pero no se usan para la toma de asistencias ni para el calculo de progreso.

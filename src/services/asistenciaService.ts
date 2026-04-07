@@ -20,6 +20,72 @@ function toDateOnly(date: Date) {
   return date.toISOString().slice(0, 10)
 }
 
+function parseDateOnlyUtc(value: string) {
+  return new Date(`${value}T00:00:00.000Z`)
+}
+
+function addDaysUtc(date: Date, days: number) {
+  const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()))
+  d.setUTCDate(d.getUTCDate() + days)
+  return d
+}
+
+function getEasterSundayUtc(year: number) {
+  const a = year % 19
+  const b = Math.floor(year / 100)
+  const c = year % 100
+  const d = Math.floor(b / 4)
+  const e = b % 4
+  const f = Math.floor((b + 8) / 25)
+  const g = Math.floor((b - f + 1) / 3)
+  const h = (19 * a + b - d - g + 15) % 30
+  const i = Math.floor(c / 4)
+  const k = c % 4
+  const l = (32 + 2 * e + 2 * i - h - k) % 7
+  const m = Math.floor((a + 11 * h + 22 * l) / 451)
+  const month = Math.floor((h + l - 7 * m + 114) / 31)
+  const day = ((h + l - 7 * m + 114) % 31) + 1
+
+  return new Date(Date.UTC(year, month - 1, day))
+}
+
+function getSecondMondayOfOctoberUtc(year: number) {
+  const octoberFirst = new Date(Date.UTC(year, 9, 1))
+  const weekday = octoberFirst.getUTCDay()
+  const firstMondayOffset = (8 - weekday) % 7
+  const firstMonday = addDaysUtc(octoberFirst, firstMondayOffset)
+  return addDaysUtc(firstMonday, 7)
+}
+
+function rangesOverlap(startA: Date, endA: Date, startB: Date, endB: Date) {
+  return startA <= endB && startB <= endA
+}
+
+export function isSemanaEspecialSinAsistencia(semana: Semana) {
+  const start = parseDateOnlyUtc(semana.fecha_inicio)
+  const end = parseDateOnlyUtc(semana.fecha_fin)
+  const year = start.getUTCFullYear()
+
+  const easterSunday = getEasterSundayUtc(year)
+  const holyWeekStart = addDaysUtc(easterSunday, -6)
+  const holyWeekEnd = easterSunday
+
+  if (rangesOverlap(start, end, holyWeekStart, holyWeekEnd)) {
+    return true
+  }
+
+  const recessStart = getSecondMondayOfOctoberUtc(year)
+  const recessEnd = addDaysUtc(recessStart, 6)
+
+  return rangesOverlap(start, end, recessStart, recessEnd)
+}
+
+function sortWeeksByStartDateAsc(semanas: Semana[]) {
+  return [...semanas].sort((a, b) =>
+    parseDateOnlyUtc(a.fecha_inicio).getTime() - parseDateOnlyUtc(b.fecha_inicio).getTime(),
+  )
+}
+
 export async function getSemanaActual(): Promise<Semana | null> {
   const nowDate = withOffset(new Date())
   const now = toDateOnly(nowDate)
@@ -333,22 +399,25 @@ export async function getDashboardMetrics(
     semanaActual.corte_semestre,
   )
 
-  const asistenciasTotales = asistenciasSemestrales.length
-  const semanaPendienteIndex =
-    totalMaterias > 0 ? Math.floor(asistenciasTotales / totalMaterias) + 1 : 1
-
-  const { data: semanaObjetivoData, error: semanaObjetivoError } = await supabase
+  const { data: semanasCorte, error: semanasCorteError } = await supabase
     .from('semanas')
     .select('*')
     .eq('corte_semestre', semanaActual.corte_semestre)
-    .eq('semana_academica', semanaPendienteIndex)
-    .maybeSingle()
 
-  if (semanaObjetivoError) {
-    throw semanaObjetivoError
+  if (semanasCorteError) {
+    throw semanasCorteError
   }
 
-  const semanaObjetivo = semanaObjetivoData
+  const semanasHabilitadas = sortWeeksByStartDateAsc(
+    (semanasCorte ?? []).filter((semana) => !isSemanaEspecialSinAsistencia(semana as Semana)) as Semana[],
+  )
+
+  const asistenciasTotales = asistenciasSemestrales.length
+  const semanasCompletadas = totalMaterias > 0 ? Math.floor(asistenciasTotales / totalMaterias) : 0
+  const semanaObjetivo =
+    totalMaterias > 0 && semanasHabilitadas.length > 0
+      ? semanasHabilitadas[semanasCompletadas] ?? null
+      : null
 
   const asistenciasSemanaObjetivo = semanaObjetivo
     ? await getAsistenciasSemana(estudiante.id, semanaObjetivo.id)
@@ -357,10 +426,14 @@ export async function getDashboardMetrics(
   const asistenciaSemanalPorcentaje =
     totalMaterias > 0 ? (asistenciasSemanaObjetivo.length * 100) / totalMaterias : 0
 
-  const divisor = totalMaterias * Math.max(semanaActual.semana_academica - 1, 1)
+  const semanasHabilitadasHastaSemanaActual = semanasHabilitadas.filter(
+    (semana) => parseDateOnlyUtc(semana.fecha_inicio) <= parseDateOnlyUtc(semanaActual.fecha_inicio),
+  ).length
+
+  const divisor = totalMaterias * Math.max(semanasHabilitadasHastaSemanaActual - 1, 1)
   const asistenciaSemestralPorcentaje = divisor > 0 ? (asistenciasTotales * 100) / divisor : 0
 
-  const totalEsperadoSemestre = totalMaterias * semanaActual.semana_academica
+  const totalEsperadoSemestre = totalMaterias * semanasHabilitadasHastaSemanaActual
 
   return {
     totalMaterias,

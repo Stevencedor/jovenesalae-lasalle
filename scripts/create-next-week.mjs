@@ -38,6 +38,58 @@ function getAcademicPeriod(date) {
   return `${year}-${semester}`
 }
 
+function getEasterSundayUtc(year) {
+  const a = year % 19
+  const b = Math.floor(year / 100)
+  const c = year % 100
+  const d = Math.floor(b / 4)
+  const e = b % 4
+  const f = Math.floor((b + 8) / 25)
+  const g = Math.floor((b - f + 1) / 3)
+  const h = (19 * a + b - d - g + 15) % 30
+  const i = Math.floor(c / 4)
+  const k = c % 4
+  const l = (32 + 2 * e + 2 * i - h - k) % 7
+  const m = Math.floor((a + 11 * h + 22 * l) / 451)
+  const month = Math.floor((h + l - 7 * m + 114) / 31)
+  const day = ((h + l - 7 * m + 114) % 31) + 1
+
+  return new Date(Date.UTC(year, month - 1, day))
+}
+
+function getSecondMondayOfOctoberUtc(year) {
+  const octoberFirst = new Date(Date.UTC(year, 9, 1))
+  const weekday = octoberFirst.getUTCDay()
+  const firstMondayOffset = (8 - weekday) % 7
+  const firstMonday = addDaysUtc(octoberFirst, firstMondayOffset)
+  return addDaysUtc(firstMonday, 7)
+}
+
+function rangesOverlap(startA, endA, startB, endB) {
+  return startA <= endB && startB <= endA
+}
+
+function getSpecialWeekType(startDate, endDate) {
+  const year = startDate.getUTCFullYear()
+
+  const easterSunday = getEasterSundayUtc(year)
+  const holyWeekStart = addDaysUtc(easterSunday, -6)
+  const holyWeekEnd = easterSunday
+
+  if (rangesOverlap(startDate, endDate, holyWeekStart, holyWeekEnd)) {
+    return 'semana_santa'
+  }
+
+  const recessStart = getSecondMondayOfOctoberUtc(year)
+  const recessEnd = addDaysUtc(recessStart, 6)
+
+  if (rangesOverlap(startDate, endDate, recessStart, recessEnd)) {
+    return 'receso_octubre'
+  }
+
+  return null
+}
+
 async function main() {
   const { data: lastWeek, error: lastWeekError } = await supabase
     .from('semanas')
@@ -83,12 +135,17 @@ async function main() {
     semana_academica: nextWeekNumber,
     fecha_inicio: nextStartStr,
     fecha_fin: nextEndStr,
-    activa: true,
   }
+
+  const specialWeekType = getSpecialWeekType(nextStart, nextEnd)
 
   if (DRY_RUN) {
     console.log('DRY_RUN=true: no se inserta en base de datos. Payload calculado:')
     console.log(payload)
+    if (specialWeekType) {
+      console.log(`Semana especial detectada: ${specialWeekType}.`)
+      console.log('Esta semana debe crearse, pero no se debe usar para toma de asistencia.')
+    }
     return
   }
 
@@ -104,6 +161,10 @@ async function main() {
 
   console.log('Semana creada correctamente:')
   console.log(insertedWeek)
+  if (specialWeekType) {
+    console.log(`Semana especial detectada: ${specialWeekType}.`)
+    console.log('Esta semana debe crearse, pero no se debe usar para toma de asistencia.')
+  }
 }
 
 main().catch((error) => {
