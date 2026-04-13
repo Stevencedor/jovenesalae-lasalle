@@ -5,7 +5,7 @@ import {
   getDashboardMetrics,
   getMateriasConRegistroSemana,
 } from '../services/asistenciaService'
-import type { Materia, TipoMatricula } from '../types/domain'
+import type { Materia, TipoMatricula, TipoSemanaEspecial } from '../types/domain'
 
 type MateriaConEstado = Materia & { registro: boolean; tipo: TipoMatricula }
 
@@ -37,6 +37,7 @@ export function MateriasPage() {
   const { profile } = useAuth()
   const [materias, setMaterias] = useState<MateriaConEstado[]>([])
   const [semanaTexto, setSemanaTexto] = useState('')
+  const [tipoSemanaEspecial, setTipoSemanaEspecial] = useState<TipoSemanaEspecial | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -47,6 +48,15 @@ export function MateriasPage() {
 
     getDashboardMetrics(profile)
       .then(async (metrics) => {
+        setTipoSemanaEspecial(metrics.tipoSemanaEspecial)
+
+        if (metrics.tipoSemanaEspecial) {
+          setMaterias([])
+          setSemanaTexto(`No requiere asistencia: ${metrics.tipoSemanaEspecial}`)
+          setLoading(false)
+          return
+        }
+
         if (!metrics.semanaObjetivo) {
           setMaterias([])
           setSemanaTexto('No hay semana activa para registrar.')
@@ -71,6 +81,20 @@ export function MateriasPage() {
 
   if (error) {
     return <div className="card error-text">{error}</div>
+  }
+
+  if (tipoSemanaEspecial) {
+    return (
+      <section className="stack-lg">
+        <div className="card">
+          <p className="eyebrow">Registro</p>
+          <h1>{semanaTexto}</h1>
+          <p>
+            Esta semana se cuenta en el calendario, pero no es hábil para tomar asistencia.
+          </p>
+        </div>
+      </section>
+    )
   }
 
   return (

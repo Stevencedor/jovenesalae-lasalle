@@ -7,7 +7,7 @@ import {
   getMateriasConRegistroSemana,
   getMateriasEstudiante,
 } from '../services/asistenciaService'
-import type { TipoAsistencia } from '../types/domain'
+import type { TipoAsistencia, TipoSemanaEspecial } from '../types/domain'
 
 const opciones: Array<{ value: TipoAsistencia; label: string }> = [
   { value: 'Si', label: 'Sí' },
@@ -30,6 +30,7 @@ export function AsistenciaPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [tipoSemanaEspecial, setTipoSemanaEspecial] = useState<TipoSemanaEspecial | null>(null)
 
   const requiereMotivo = asistencia === 'No'
   const requiereRating = asistencia === 'Si'
@@ -69,13 +70,25 @@ export function AsistenciaPage() {
     }
 
     getMateriasEstudiante(profile.id)
-      .then((materias) => {
+      .then(async (materias) => {
         const materia = materias.find((item) => item.id === materiaIdNum)
         if (!materia) {
           setError('La materia no pertenece a tu matricula actual.')
-        } else {
+        }
+
+        const metrics = await getDashboardMetrics(profile)
+        setTipoSemanaEspecial(metrics.tipoSemanaEspecial)
+
+        if (metrics.tipoSemanaEspecial) {
+          setMateriaNombre(materia?.nombre ?? '')
+          setLoading(false)
+          return
+        }
+
+        if (materia) {
           setMateriaNombre(materia.nombre)
         }
+
         setLoading(false)
       })
       .catch((err: unknown) => {
@@ -102,6 +115,10 @@ export function AsistenciaPage() {
     setError(null)
 
     try {
+      if (tipoSemanaEspecial) {
+        throw new Error(`No se requiere llenar asistencia durante ${tipoSemanaEspecial}.`)
+      }
+
       const materias = await getMateriasEstudiante(profile.id)
       const materiaExiste = materias.some((m) => m.id === materiaIdNum)
 
@@ -144,6 +161,24 @@ export function AsistenciaPage() {
 
   if (loading) {
     return <div className="card">Cargando formulario...</div>
+  }
+
+  if (tipoSemanaEspecial) {
+    return (
+      <section className="stack-lg">
+        <div className="card">
+          <p className="eyebrow">Registrar asistencia</p>
+          <h1>{materiaNombre || 'Asistencia no requerida'}</h1>
+          <p>
+            Esta semana corresponde a {tipoSemanaEspecial}. No se requiere diligenciar asistencia,
+            pero la semana queda registrada para trazabilidad.
+          </p>
+          <p>
+            <Link to="/materias">Volver a materias</Link>
+          </p>
+        </div>
+      </section>
+    )
   }
 
   return (

@@ -8,13 +8,20 @@
 
 Aplicacion web para el seguimiento de asistencia de Jovenes a la E, con paneles por rol y gestion academica centralizada en Supabase.
 
-## Mejoras recientes
+## Trazabilidad de features recientes
 
-- Experiencia de navegacion mas fluida: la estructura de las vistas se mantiene visible mientras se actualizan datos.
-- Carga inteligente: cache local en memoria y persistencia en sessionStorage para conservar estado entre navegacion y recarga del navegador.
-- Actualizacion en tiempo real: refresco de datos cuando realmente hay cambios en base de datos.
-- Mejor rendimiento del dashboard: reduccion de consultas repetitivas y recalculo controlado de metricas semestrales con TTL por segmento.
-- Flujo Tutor fortalecido: vista ejecutiva por grupos, edicion de Hermanos Menores y Hermanos Mayores, y gestion de asignaciones.
+Esta seccion resume las ultimas actualizaciones visibles para usuarios y desarrolladores.
+
+- Semana academica automatizada: se crea la siguiente semana cada lunes y se calcula el periodo actual de forma consistente.
+- Semanas especiales: Semana Santa y receso de octubre se crean para trazabilidad, pero no habilitan registro de asistencia.
+- Banner informativo: el dashboard avisa cuando el estudiante esta en una semana no habil para asistir.
+- Bloqueo de asistencia: el flujo de registro no permite enviar asistencia en semanas especiales.
+- Panel de seguimiento: el selector muestra todas las semanas del periodo actual, no solo la ultima creada.
+- Texto copiable: el reporte de seguimiento conserva trazabilidad con la informacion minima en semanas especiales.
+- Rendimiento y estado: cache local en memoria y sessionStorage para conservar el contexto entre navegacion y recarga.
+- Actualizacion reactiva: refresco de datos cuando hay cambios reales en Supabase.
+- Vista Tutor fortalecida: resumen por grupos, edicion de Hermanos Menores y Hermanos Mayores, y gestion de asignaciones.
+- Dashboard optimizado: menos consultas repetitivas y calculo controlado de metricas semestrales con TTL por segmento.
 
 ## Modulos principales
 

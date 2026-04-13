@@ -43,6 +43,8 @@ export interface Semana {
   fecha_fin: string
 }
 
+export type TipoSemanaEspecial = 'Semana Santa' | 'Receso de octubre'
+
 export type TipoAsistencia =
   | 'Si'
   | 'No'
@@ -89,4 +91,5 @@ export interface DashboardMetrics {
   totalEsperadoSemestre: number
   semanaObjetivo: Semana | null
   semanaActual: Semana | null
+  tipoSemanaEspecial: TipoSemanaEspecial | null
 }

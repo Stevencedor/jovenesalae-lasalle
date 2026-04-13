@@ -9,8 +9,14 @@ import {
   getResumenSemestralPorEstudiantes,
   getResumenTutorGeneral,
   getSemanaActual,
+  getTipoSemanaEspecial,
 } from '../services/asistenciaService'
-import type { DashboardMetrics, ResumenAsistencia, TutorGrupoResumen } from '../types/domain'
+import type {
+  DashboardMetrics,
+  ResumenAsistencia,
+  TipoSemanaEspecial,
+  TutorGrupoResumen,
+} from '../types/domain'
 
 type LiderSummary = {
   totalHermanosMayores: number
@@ -36,6 +42,7 @@ type LiderSummary = {
   }>
   corte: string
   semanaAcademica: number
+  tipoSemanaEspecial: TipoSemanaEspecial | null
 }
 
 type DashboardCacheEntry = {
@@ -105,6 +112,7 @@ const emptyLiderSummary: LiderSummary = {
   detalleTutor: [],
   corte: '-',
   semanaAcademica: 0,
+  tipoSemanaEspecial: null,
 }
 
 const emptyMetrics: DashboardMetrics = {
@@ -116,6 +124,7 @@ const emptyMetrics: DashboardMetrics = {
   totalEsperadoSemestre: 0,
   semanaObjetivo: null,
   semanaActual: null,
+  tipoSemanaEspecial: null,
 }
 
 function formatPercent(value: number) {
@@ -199,6 +208,9 @@ export function DashboardPage() {
       return
     }
 
+    const cached = dashboardViewCache.get(cacheKey) ?? readDashboardCacheFromSession(cacheKey)
+    const tipoSemanaEspecial = cached?.liderSummary?.tipoSemanaEspecial ?? null
+
     if (profile.rol === 'Hermano_Mayor') {
       const resumenSemana = await getResumenHermanoMayor(profile.id, semanaId)
       const semestralPorEstudiante = await getSemestralSegmentSnapshot(
@@ -218,6 +230,7 @@ export function DashboardPage() {
         detalleTutor: [],
         corte: corteSemestre,
         semanaAcademica,
+        tipoSemanaEspecial,
       }
 
       setLiderSummary(nextSummary)
@@ -265,6 +278,7 @@ export function DashboardPage() {
       detalleTutor,
       corte: corteSemestre,
       semanaAcademica,
+      tipoSemanaEspecial,
     }
 
     setLiderSummary(nextSummary)
@@ -349,6 +363,7 @@ export function DashboardPage() {
             detalleTutor: [],
             corte: semanaActual.corte_semestre,
             semanaAcademica: semanaActual.semana_academica,
+            tipoSemanaEspecial: getTipoSemanaEspecial(semanaActual),
           })
           setMetrics(null)
           saveDashboardCache(cacheKey, {
@@ -363,6 +378,7 @@ export function DashboardPage() {
               detalleTutor: [],
               corte: semanaActual.corte_semestre,
               semanaAcademica: semanaActual.semana_academica,
+              tipoSemanaEspecial: getTipoSemanaEspecial(semanaActual),
             },
             semanaId: semanaActual.id,
           })
@@ -409,6 +425,7 @@ export function DashboardPage() {
           detalleTutor,
           corte: semanaActual.corte_semestre,
           semanaAcademica: semanaActual.semana_academica,
+          tipoSemanaEspecial: getTipoSemanaEspecial(semanaActual),
         }
 
         setLiderSummary(nextSummary)
@@ -495,10 +512,24 @@ export function DashboardPage() {
 
   const viewMetrics = metrics ?? emptyMetrics
   const viewSummary = liderSummary ?? emptyLiderSummary
+  const tipoSemanaEspecial = viewMetrics.tipoSemanaEspecial ?? viewSummary.tipoSemanaEspecial
+
+  const bannerSemanaEspecial = tipoSemanaEspecial ? (
+    <div className="card banner banner-special">
+      <p className="eyebrow">Semana especial</p>
+      <h1>{tipoSemanaEspecial}</h1>
+      <p>
+        Esta semana se registra en el calendario para trazabilidad, pero no es hábil para
+        diligenciar asistencia.
+      </p>
+      <span className="pill pill-warn">No requiere asistencia</span>
+    </div>
+  ) : null
 
   if (profile?.rol === 'Hermano_Menor') {
     return (
       <section className="stack-xl">
+        {bannerSemanaEspecial}
         <div className="card banner">
           <p className="eyebrow">Resumen semanal</p>
           <h1>Hola, {profile?.nombre}</h1>
@@ -541,6 +572,7 @@ export function DashboardPage() {
 
   return (
     <section className="stack-xl">
+      {bannerSemanaEspecial}
       <div className="card banner">
         <p className="eyebrow">Resumen de liderazgo</p>
         <h1>Hola, {profile?.nombre}</h1>

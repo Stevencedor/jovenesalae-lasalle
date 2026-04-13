@@ -9,6 +9,7 @@ import type {
   Semana,
   TipoAsistencia,
   TipoMatricula,
+  TipoSemanaEspecial,
   TutorGrupoResumen,
 } from '../types/domain'
 
@@ -61,7 +62,7 @@ function rangesOverlap(startA: Date, endA: Date, startB: Date, endB: Date) {
   return startA <= endB && startB <= endA
 }
 
-export function isSemanaEspecialSinAsistencia(semana: Semana) {
+export function getTipoSemanaEspecial(semana: Semana): TipoSemanaEspecial | null {
   const start = parseDateOnlyUtc(semana.fecha_inicio)
   const end = parseDateOnlyUtc(semana.fecha_fin)
   const year = start.getUTCFullYear()
@@ -71,13 +72,21 @@ export function isSemanaEspecialSinAsistencia(semana: Semana) {
   const holyWeekEnd = easterSunday
 
   if (rangesOverlap(start, end, holyWeekStart, holyWeekEnd)) {
-    return true
+    return 'Semana Santa'
   }
 
   const recessStart = getSecondMondayOfOctoberUtc(year)
   const recessEnd = addDaysUtc(recessStart, 6)
 
-  return rangesOverlap(start, end, recessStart, recessEnd)
+  if (rangesOverlap(start, end, recessStart, recessEnd)) {
+    return 'Receso de octubre'
+  }
+
+  return null
+}
+
+export function isSemanaEspecialSinAsistencia(semana: Semana) {
+  return getTipoSemanaEspecial(semana) !== null
 }
 
 function sortWeeksByStartDateAsc(semanas: Semana[]) {
@@ -104,6 +113,10 @@ export async function getSemanaActual(): Promise<Semana | null> {
   }
 
   if (currentWeek) {
+    if (isSemanaEspecialSinAsistencia(currentWeek)) {
+      return currentWeek
+    }
+
     const currentDay = nowDate.getDay()
 
     if (currentDay < 5) {
@@ -388,8 +401,11 @@ export async function getDashboardMetrics(
       totalEsperadoSemestre: 0,
       semanaObjetivo: null,
       semanaActual: null,
+      tipoSemanaEspecial: null,
     }
   }
+
+  const tipoSemanaEspecial = getTipoSemanaEspecial(semanaActual)
 
   const materias = await getMateriasEstudiante(estudiante.id)
   const totalMaterias = materias.length
@@ -411,6 +427,28 @@ export async function getDashboardMetrics(
   const semanasHabilitadas = sortWeeksByStartDateAsc(
     (semanasCorte ?? []).filter((semana) => !isSemanaEspecialSinAsistencia(semana as Semana)) as Semana[],
   )
+
+  if (tipoSemanaEspecial) {
+    const semanasHabilitadasHastaSemanaActual = semanasHabilitadas.filter(
+      (semana) =>
+        parseDateOnlyUtc(semana.fecha_inicio) <= parseDateOnlyUtc(semanaActual.fecha_inicio),
+    ).length
+
+    const divisor = totalMaterias * Math.max(semanasHabilitadasHastaSemanaActual - 1, 1)
+    const asistenciaSemestralPorcentaje = divisor > 0 ? (asistenciasSemestrales.length * 100) / divisor : 0
+
+    return {
+      totalMaterias,
+      asistenciaSemanalPorcentaje: 0,
+      asistenciasSemana: 0,
+      asistenciaSemestralPorcentaje,
+      asistenciasTotales: asistenciasSemestrales.length,
+      totalEsperadoSemestre: totalMaterias * semanasHabilitadasHastaSemanaActual,
+      semanaObjetivo: null,
+      semanaActual,
+      tipoSemanaEspecial,
+    }
+  }
 
   const asistenciasTotales = asistenciasSemestrales.length
   const semanasCompletadas = totalMaterias > 0 ? Math.floor(asistenciasTotales / totalMaterias) : 0
@@ -444,6 +482,7 @@ export async function getDashboardMetrics(
     totalEsperadoSemestre,
     semanaObjetivo,
     semanaActual,
+    tipoSemanaEspecial: null,
   }
 }
 
@@ -747,8 +786,7 @@ export async function getTodasLasSemanas(): Promise<Semana[]> {
 }
 
 export async function getTextoReporteAsistencia(estudiante: Estudiante, semana: Semana): Promise<string> {
-  const materias = await getMateriasEstudiante(estudiante.id)
-  const asistencias = await getAsistenciasSemana(estudiante.id, semana.id)
+  const tipoSemanaEspecial = getTipoSemanaEspecial(semana)
 
   const fechaInicio = semana.fecha_inicio ?? ''
   const fechaFin = semana.fecha_fin ?? ''
@@ -756,10 +794,18 @@ export async function getTextoReporteAsistencia(estudiante: Estudiante, semana: 
   let text = `Semana ${semana.semana_academica}\n`
   text += `Identificacion: ${estudiante.cedula ?? ''}\n`
   text += `Nombre Completo: ${estudiante.nombre ?? ''}\n`
-  text += `Identificacion Movil: ${estudiante.telefono ?? ''}\n`
+  text += `Telefono: ${estudiante.telefono ?? ''}\n`
   text += `Correo personal: ${estudiante.email_personal ?? ''}\n`
   text += `Correo institucional: ${estudiante.email ?? ''}\n\n`
   text += `Fecha: ${fechaInicio} - ${fechaFin}\n\n`
+
+  if (tipoSemanaEspecial) {
+    text += `SEMANA ${tipoSemanaEspecial}\n`
+    return text.trimEnd()
+  }
+
+  const materias = await getMateriasEstudiante(estudiante.id)
+  const asistencias = await getAsistenciasSemana(estudiante.id, semana.id)
 
   for (const m of materias) {
     const a = asistencias.find((x) => x.materia_id === m.id)

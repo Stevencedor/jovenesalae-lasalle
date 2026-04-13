@@ -107,8 +107,22 @@ async function main() {
   const nextEnd = addDaysUtc(nextStart, 6)
 
   const nextPeriod = getAcademicPeriod(nextStart)
-  const nextWeekNumber =
-    lastWeek.corte_semestre === nextPeriod ? Number(lastWeek.semana_academica) + 1 : 1
+
+  const { data: maxWeekInPeriod, error: maxWeekInPeriodError } = await supabase
+    .from('semanas')
+    .select('semana_academica')
+    .eq('corte_semestre', nextPeriod)
+    .order('semana_academica', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (maxWeekInPeriodError) {
+    throw new Error(
+      `No se pudo calcular la ultima semana del periodo ${nextPeriod}: ${maxWeekInPeriodError.message}`,
+    )
+  }
+
+  const nextWeekNumber = maxWeekInPeriod ? Number(maxWeekInPeriod.semana_academica) + 1 : 1
 
   const nextStartStr = toDateOnlyUtc(nextStart)
   const nextEndStr = toDateOnlyUtc(nextEnd)

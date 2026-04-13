@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { useAuth } from '../context/useAuth'
 import { supabase } from '../lib/supabase'
@@ -165,6 +165,28 @@ export function RegistroPage() {
   const [assigningHmId, setAssigningHmId] = useState<number | null>(null)
   const [menorSinHmId, setMenorSinHmId] = useState<number | ''>('')
   const [refreshToken, setRefreshToken] = useState(0)
+
+  const periodoActual = useMemo(() => {
+    if (semanas.length === 0) {
+      return semanaActiva?.corte_semestre ?? null
+    }
+
+    const latestWeek = [...semanas].sort((a, b) => {
+      const dateA = new Date(`${a.fecha_inicio}T00:00:00.000Z`).getTime()
+      const dateB = new Date(`${b.fecha_inicio}T00:00:00.000Z`).getTime()
+      return dateB - dateA
+    })[0]
+
+    return latestWeek?.corte_semestre ?? semanaActiva?.corte_semestre ?? null
+  }, [semanas, semanaActiva?.corte_semestre])
+
+  const semanasPeriodoActual = useMemo(
+    () =>
+      semanas
+        .filter((s) => s.corte_semestre === periodoActual && s.semana_academica > 0)
+        .sort((a, b) => a.semana_academica - b.semana_academica),
+    [periodoActual, semanas],
+  )
 
   const loadData = useCallback(async (semanaIdToLoad?: number) => {
     const targetId = semanaIdToLoad
@@ -638,20 +660,15 @@ export function RegistroPage() {
           {loading && hasLoadedOnce ? <small>Actualizando datos...</small> : null}
         </div>
 
-        {semanas.length > 0 && semanaActiva?.corte_semestre && (
+        {semanasPeriodoActual.length > 0 && periodoActual && (
           <label style={{ minWidth: '220px', margin: 0 }}>
-            Semana evaluada periodo {semanaActiva.corte_semestre}
+            Semana evaluada periodo {periodoActual}
             <select value={semanaActiva?.id ?? ''} onChange={handleSemanaChange}>
-              {semanas
-                .filter(
-                  (s) =>
-                    s.corte_semestre === semanaActiva.corte_semestre && s.semana_academica > 0,
-                )
-                .map((s) => (
-                  <option key={s.id} value={s.id}>
-                    Semana {s.semana_academica}
-                  </option>
-                ))}
+              {semanasPeriodoActual.map((s) => (
+                <option key={s.id} value={s.id}>
+                  Semana {s.semana_academica}
+                </option>
+              ))}
             </select>
           </label>
         )}

@@ -469,6 +469,28 @@ select:focus {
   border-left: 4px solid var(--accent);
 }
 
+.banner-special {
+  position: relative;
+  overflow: hidden;
+  border-left-color: var(--warning);
+  background:
+    radial-gradient(circle at top right, rgba(245, 158, 11, 0.18), transparent 32%),
+    linear-gradient(120deg, #fff7ed 0%, #fffbeb 48%, #fef3c7 100%);
+}
+
+.banner-special::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 1px solid rgba(180, 83, 9, 0.18);
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.banner-special .pill {
+  margin-top: 0.5rem;
+}
+
 .banner h1 {
   font-size: 2rem;
   margin-bottom: 0.5rem;
